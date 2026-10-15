@@ -17,11 +17,23 @@ final class APIClient {
         configuration.timeoutIntervalForRequest = 30
         configuration.httpCookieStorage = nil
         configuration.urlCache = nil
-        self.session = URLSession(configuration: configuration)
+        self.session = URLSession(configuration: configuration, delegate: RejectRedirects(), delegateQueue: nil)
 
-        loginConfiguration.httpCookieStorage = HTTPCookieStorage.shared
-        loginConfiguration.httpCookieAcceptPolicy = .always
-        self.loginSession = URLSession(configuration: loginConfiguration)
+        loginConfiguration.httpCookieStorage = nil
+        loginConfiguration.urlCache = nil
+        self.loginSession = URLSession(configuration: loginConfiguration, delegate: RejectRedirects(), delegateQueue: nil)
+    }
+
+    deinit { session.invalidateAndCancel(); loginSession.invalidateAndCancel() }
+
+    func verify(_ authorization: RequestAuthorization) async throws {
+        var request = URLRequest(url: authorization.baseURL.appendingPathComponent("api/ping/"))
+        try authorization.apply(to: &request)
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              !RequestAuthorization.isAuthenticationFailure(http), (200...299).contains(http.statusCode),
+              let ping = try? Self.decoder.decode(PingDTO.self, from: data),
+              ping.response == "pong", ping.user != nil else { throw AppError.unauthorized }
     }
 
     func request<T: Decodable>(
@@ -66,9 +78,7 @@ final class APIClient {
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        if let token = authState.token {
-            request.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
-        }
+        try authState.authorization?.apply(to: &request)
 
         if let body {
             request.httpBody = try JSONEncoder().encode(body)
@@ -85,6 +95,7 @@ final class APIClient {
             throw AppError.network(underlying: nil)
         }
 
+        if RequestAuthorization.isAuthenticationFailure(httpResponse) { throw AppError.unauthorized }
         switch httpResponse.statusCode {
         case 200...299:
             return data
@@ -130,6 +141,11 @@ final class APIClient {
         let tokenURL = serverURL.appendingPathComponent("/api/appsettings/token/")
         var tokenRequest = URLRequest(url: tokenURL)
         tokenRequest.httpMethod = "GET"
+        let responseHeaders = httpLoginResponse.allHeaderFields.reduce(into: [String: String]()) { headers, entry in
+            if let key = entry.key as? String, let value = entry.value as? String { headers[key] = value }
+        }
+        let cookies = HTTPCookie.cookies(withResponseHeaderFields: responseHeaders, for: serverURL)
+        try RequestAuthorization(baseURL: serverURL, cookies: cookies).apply(to: &tokenRequest)
 
         let (tokenData, tokenResponse): (Data, URLResponse)
         do {
@@ -144,13 +160,6 @@ final class APIClient {
         }
 
         let tokenDTO = try Self.decoder.decode(TokenResponseDTO.self, from: tokenData)
-
-        // Clear session cookies so they don't leak into subsequent logins to different servers
-        if let cookies = loginSession.configuration.httpCookieStorage?.cookies(for: serverURL) {
-            for cookie in cookies {
-                loginSession.configuration.httpCookieStorage?.deleteCookie(cookie)
-            }
-        }
 
         return tokenDTO.token
     }

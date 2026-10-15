@@ -37,6 +37,7 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     nonisolated let videoId: String
     nonisolated let originalURL: URL
     nonisolated let token: String
+    nonisolated let authorization: RequestAuthorization?
     nonisolated let loaderQueue = DispatchQueue(label: "ru.mzhukov.TAClient.resourceLoader", qos: .userInitiated)
 
     nonisolated private let networkSession: URLSession
@@ -77,6 +78,7 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
         videoId: String,
         originalURL: URL,
         token: String,
+        authorization: RequestAuthorization? = nil,
         sessionConfiguration: URLSessionConfiguration? = nil,
         store: CacheStore = VideoCachePreloader.shared.store,
         isPreloadingCheck: (@Sendable (String) async -> Bool)? = nil,
@@ -85,6 +87,7 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
         self.videoId = videoId
         self.originalURL = originalURL
         self.token = token
+        self.authorization = authorization
         self.store = store
         self.isPreloadingCheck = isPreloadingCheck ?? { id in
             await VideoCachePreloader.shared.isPreloading(videoId: id)
@@ -101,7 +104,7 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
             config.httpCookieStorage = nil
             config.urlCache = nil
         }
-        self.networkSession = URLSession(configuration: config)
+        self.networkSession = URLSession(configuration: config, delegate: RejectRedirects(), delegateQueue: nil)
 
         super.init()
     }
@@ -276,7 +279,9 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
         var request = URLRequest(url: originalURL)
         request.httpMethod = "HEAD"
-        request.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
+        if let authorization {
+            do { try authorization.apply(to: &request) } catch { return nil }
+        } else { request.setValue("Token \(token)", forHTTPHeaderField: "Authorization") }
 
         do {
             let (_, response) = try await networkSession.data(for: request)
@@ -540,7 +545,9 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
     nonisolated private func fetchFromNetwork(offset: Int64, length: Int) async -> NetworkFetchResult {
         var request = URLRequest(url: originalURL)
-        request.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
+        if let authorization {
+            do { try authorization.apply(to: &request) } catch { return .failed }
+        } else { request.setValue("Token \(token)", forHTTPHeaderField: "Authorization") }
         let endByte = offset + Int64(length) - 1
         request.setValue("bytes=\(offset)-\(endByte)", forHTTPHeaderField: "Range")
 
@@ -611,12 +618,12 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
     /// dispatch logic directly without an `AVAssetResourceLoadingRequest`.
     nonisolated func handleUnauthorizedIfNeeded(response: URLResponse?) -> Bool {
         guard let http = response as? HTTPURLResponse else { return false }
-        if http.statusCode == 401 || http.statusCode == 403 {
+        if RequestAuthorization.isAuthenticationFailure(http) {
             logger.error("Unauthorized for \(self.videoId): \(http.statusCode)")
             // Post with `videoId` as `object` so tests can scope observers
             // to a specific loader instance and avoid cross-test bleed.
             // AppRouter's observer uses `object: nil` and ignores the value.
-            NotificationCenter.default.post(name: .taAuthUnauthorized, object: self.videoId)
+            NotificationCenter.default.post(name: .taAuthUnauthorized, object: self.videoId, userInfo: authorization.map { ["authorizationID": $0.id] })
             return true
         }
         return false

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct LoginView: View {
     @Bindable var viewModel: LoginViewModel
+    @State private var showToken = false
     @FocusState private var serverURLFocused: Bool
 
     var body: some View {
@@ -26,11 +27,6 @@ struct LoginView: View {
                             .textInputAutocapitalization(.never)
                             .keyboardType(.URL)
                             .focused($serverURLFocused)
-                            .onChange(of: serverURLFocused) { _, focused in
-                                if focused && viewModel.serverURL.isEmpty {
-                                    viewModel.serverURL = "https://"
-                                }
-                            }
                             .onChange(of: viewModel.serverURL) {
                                 let url = viewModel.serverURL
                                 for scheme in ["https://", "http://"] {
@@ -46,16 +42,18 @@ struct LoginView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    TextField(String(localized: "login_username"), text: $viewModel.username)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.username)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-
-                    SecureField(String(localized: "login_password"), text: $viewModel.password)
-                        .textFieldStyle(.roundedBorder)
-                        .textContentType(.password)
-
+                    Text(String(localized: "login_server_explanation"))
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button(String(localized: "login_server_button")) { viewModel.beginServerSignIn() }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityLabel(String(localized: "login_server_button"))
+                        .disabled(viewModel.isLoading)
+                    DisclosureGroup(String(localized: "login_token_fallback"), isExpanded: $showToken) {
+                        Text(String(localized: "login_token_explanation")).font(.caption).foregroundStyle(.secondary)
+                        SecureField(String(localized: "login_api_token"), text: $viewModel.apiToken)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityLabel(String(localized: "login_api_token"))
+                    }
                     if let error = viewModel.errorMessage {
                         Text(error)
                             .foregroundStyle(.red)
@@ -63,9 +61,10 @@ struct LoginView: View {
                             .multilineTextAlignment(.center)
                     }
 
+                    if showToken {
                     Button {
                         Task {
-                            await viewModel.login()
+                            await viewModel.connectToken()
                         }
                     } label: {
                         if viewModel.isLoading {
@@ -77,7 +76,9 @@ struct LoginView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(viewModel.isLoading || viewModel.serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.password.isEmpty)
+                    .disabled(viewModel.isLoading || viewModel.apiToken.isEmpty)
+                    .accessibilityLabel(String(localized: "login_button"))
+                    }
                 }
                 .frame(maxWidth: 440)
                 .padding(20)
@@ -90,5 +91,8 @@ struct LoginView: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .geometryGroup()
+        .sheet(item: $viewModel.signInDestination) { destination in
+            ServerSignInView(url: destination.url, viewModel: viewModel)
+        }
     }
 }

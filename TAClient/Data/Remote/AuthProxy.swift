@@ -143,6 +143,7 @@ actor AuthProxy {
     private var listener: NWListener?
     private var port: UInt16 = 0
     private let token: String
+    private let authorization: RequestAuthorization?
     private let serverBaseURL: URL
     private let pathSecret = UUID().uuidString
     /// "The published listener was torn down." `stop()` sets it so a late `.failed`
@@ -193,8 +194,9 @@ actor AuthProxy {
 
     var localPort: UInt16 { port }
 
-    init(token: String, serverBaseURL: URL) {
+    init(token: String, serverBaseURL: URL, authorization: RequestAuthorization? = nil) {
         self.token = token
+        self.authorization = authorization
         self.serverBaseURL = serverBaseURL
     }
 
@@ -426,7 +428,8 @@ actor AuthProxy {
     }
 
     private func proxyURL(for originalURL: URL, host: String) -> URL? {
-        guard port > 0,
+        guard port > 0, RequestAuthorization.origin(originalURL) == RequestAuthorization.origin(serverBaseURL),
+              originalURL.user == nil, originalURL.password == nil,
               let original = URLComponents(url: originalURL, resolvingAgainstBaseURL: false) else { return nil }
         var components = URLComponents()
         components.scheme = "http"
@@ -520,7 +523,9 @@ actor AuthProxy {
 
         var request = URLRequest(url: upstreamURL)
         request.httpMethod = method
-        request.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
+        if let authorization {
+            do { try authorization.apply(to: &request) } catch { connection.cancel(); return }
+        } else { request.setValue("Token \(token)", forHTTPHeaderField: "Authorization") }
         if let rangeHeader {
             request.setValue(rangeHeader, forHTTPHeaderField: "Range")
         }
@@ -542,11 +547,18 @@ actor AuthProxy {
         defer { streamer.cancelUpstream() }
         do {
             let config = URLSessionConfiguration.default
+            config.httpCookieStorage = nil
+            config.urlCache = nil
             config.timeoutIntervalForRequest = 0
             config.timeoutIntervalForResource = 0
 
             let (httpResponse, chunks) = try await streamer.stream(request: request, configuration: config)
 
+            if RequestAuthorization.isAuthenticationFailure(httpResponse) {
+                NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil, userInfo: authorization.map { ["authorizationID": $0.id] })
+                connection.cancel()
+                return
+            }
             // Build response header
             var header = "HTTP/1.1 \(httpResponse.statusCode)"
             if let reason = Self.statusReason(httpResponse.statusCode) {

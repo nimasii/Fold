@@ -31,6 +31,17 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
         authState.setCredentials(token: token, serverURL: normalizedURL)
     }
 
+    func connectSession(serverURL: URL, cookies: [HTTPCookie]) async throws {
+        // Validate without fetching/creating tokens or replacing a working connection.
+        try await apiClient.verify(RequestAuthorization(baseURL: serverURL, cookies: cookies))
+        try authState.setSession(cookies: cookies, serverURL: serverURL)
+    }
+
+    func connectToken(serverURL: URL, token: String) async throws {
+        try await apiClient.verify(RequestAuthorization(baseURL: serverURL, token: token))
+        try authState.setExistingToken(token, serverURL: serverURL)
+    }
+
     func ping() async throws -> Bool {
         let response: PingDTO = try await apiClient.request(endpoint: .ping)
         return response.response == "pong"

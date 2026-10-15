@@ -28,7 +28,9 @@ final class AppRouter {
             forName: .taAuthUnauthorized,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            if let id = notification.userInfo?["authorizationID"] as? UUID,
+               id != self?.authState.authorization?.id { return }
             self?.handleUnauthorized()
         }
     }
@@ -64,6 +66,12 @@ final class AppRouter {
         didHandleUnauth = true
 
         authState.handleUnauthorized()
+        Task { [authState] in
+            guard authState.authorization == nil else { return }
+            await ImageCache.shared.clear()
+            guard authState.authorization == nil else { return }
+            await VideoCachePreloader.shared.clear()
+        }
         path = NavigationPath()
         deletedVideoIds.removeAll()
         watchedChanges.removeAll()

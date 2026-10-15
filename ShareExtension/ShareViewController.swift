@@ -77,34 +77,39 @@ class ShareViewController: UIViewController {
             return
         }
 
-        guard let (token, serverURL) = readCredentials() else {
+        guard let authorization = readAuthorization() else {
             finish(error: .notLoggedIn)
             return
         }
 
-        addToQueue(urlString: url.absoluteString, token: token, serverURL: serverURL)
+        addToQueue(urlString: url.absoluteString, authorization: authorization)
     }
 
     // MARK: - Keychain (inline)
 
-    private func readCredentials() -> (token: String, serverURL: String)? {
-        guard let token = keychainLoad("auth_token"),
-              let serverURL = keychainLoad("server_url") else {
-            return nil
+    private func readAuthorization() -> RequestAuthorization? {
+        if let data = keychainLoad("session_cookies_v1")?.data(using: .utf8),
+           let stored = try? JSONDecoder().decode(StoredSession.self, from: data),
+           let url = RequestAuthorization.normalizedURL(stored.serverURL.absoluteString) {
+            return RequestAuthorization(baseURL: url, token: stored.token, cookies: stored.cookies.compactMap(\.cookie))
         }
-        return (token, serverURL)
+        guard let savedURL = keychainLoad("server_url"), let url = RequestAuthorization.normalizedURL(savedURL),
+              let token = keychainLoad("auth_token") else { return nil }
+        return RequestAuthorization(baseURL: url, token: token)
     }
 
     private func keychainLoad(_ account: String) -> String? {
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: "ru.mzhukov.TAClient",
             kSecAttrAccount as String: account,
-            kSecAttrAccessGroup as String: "5AS4WKH94K.ru.mzhukov.TAClient",
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
 
+        if let group = Bundle.main.object(forInfoDictionaryKey: "KeychainAccessGroup") as? String, !group.contains("$(") {
+            query[kSecAttrAccessGroup as String] = group
+        }
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
@@ -116,15 +121,15 @@ class ShareViewController: UIViewController {
 
     // MARK: - API Call (inline)
 
-    private func addToQueue(urlString: String, token: String, serverURL: String) {
-        guard let apiURL = URL(string: "\(serverURL)/api/download/") else {
+    private func addToQueue(urlString: String, authorization: RequestAuthorization) {
+        guard let apiURL = Optional(authorization.baseURL.appendingPathComponent("api/download/")) else {
             finish(error: .network)
             return
         }
 
         var request = URLRequest(url: apiURL)
         request.httpMethod = "POST"
-        request.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
+        do { try authorization.apply(to: &request) } catch { finish(error: .unauthorized); return }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
         let payload: [String: Any] = [
@@ -140,9 +145,10 @@ class ShareViewController: UIViewController {
 
         let config = URLSessionConfiguration.ephemeral
         config.httpCookieStorage = nil
-        let session = URLSession(configuration: config)
+        let session = URLSession(configuration: config, delegate: RejectRedirects(), delegateQueue: nil)
 
         session.dataTask(with: request) { [weak self] data, response, error in
+            session.finishTasksAndInvalidate()
             DispatchQueue.main.async {
                 if error != nil {
                     self?.finish(error: .network)
@@ -154,6 +160,7 @@ class ShareViewController: UIViewController {
                     return
                 }
 
+                if RequestAuthorization.isAuthenticationFailure(httpResponse) { self?.finish(error: .unauthorized); return }
                 switch httpResponse.statusCode {
                 case 200...299:
                     self?.finish()

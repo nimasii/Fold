@@ -184,9 +184,7 @@ final class VideoDetailViewModel {
     /// abandon-mid-bind contract without a real `NWListener`. Production always
     /// uses the default.
     @ObservationIgnored
-    var proxyFactory: @MainActor (String, URL) -> any AuthProxyConsumeProtocol = { token, baseURL in
-        AuthProxy(token: token, serverBaseURL: baseURL)
-    }
+    var proxyFactory: @MainActor (String, URL) -> any AuthProxyConsumeProtocol = { AuthProxy(token: $0, serverBaseURL: $1) }
     private var cachingResourceLoader: CachingResourceLoader?
     private var lastVLCPosition: Double = 0
     private var lastVLCProgressSave: Date = .distantPast
@@ -279,6 +277,9 @@ final class VideoDetailViewModel {
         self.videoRepository = videoRepository
         self.playlistRepository = playlistRepository
         self.authState = authState
+        self.proxyFactory = { [authorization = authState.authorization] token, baseURL in
+            AuthProxy(token: token, serverBaseURL: baseURL, authorization: authorization)
+        }
         self.router = router
         self.sponsorBlockSettings = sponsorBlockSettings
     }
@@ -378,7 +379,7 @@ final class VideoDetailViewModel {
     private func startAVPlayback() {
         guard let video,
               let url = URL(string: video.mediaUrl),
-              let token = authState.token else { return }
+              let token = authState.playbackToken else { return }
 
         let airPlay = isAirPlayActive()
         if !airPlay, let asset = makeCachingAsset(url: url, videoId: video.youtubeId, token: token) {
@@ -764,7 +765,7 @@ final class VideoDetailViewModel {
         // state where the new URL/token pair is visible but the bypass flag
         // still reflects the previous asset's mode.
         snapshotPlaybackContext(url: url, token: token, isDirectAsset: false)
-        let loader = CachingResourceLoader(videoId: videoId, originalURL: url, token: token)
+        let loader = CachingResourceLoader(videoId: videoId, originalURL: url, token: token, authorization: authState.authorization)
         let avAsset = AVURLAsset(url: cachingURL)
         avAsset.resourceLoader.setDelegate(loader, queue: loader.loaderQueue)
         self.cachingResourceLoader = loader
@@ -1039,6 +1040,7 @@ final class VideoDetailViewModel {
     /// asset-swap path can re-register them on the replacement item.
     private func registerPlayerObservers(player avPlayer: AVPlayer, videoId cachedVideoId: String, duration: Double) {
         observePlayerStatus(avPlayer, videoId: cachedVideoId, duration: duration)
+        let authorization = authState.authorization
 
         // 1s UI observer: fast-cadence updates for the lock-screen scrubber
         // (nowPlaying.refresh) + cache-health telemetry. logCacheHealth has
@@ -1072,7 +1074,7 @@ final class VideoDetailViewModel {
                             videoId: cachedVideoId,
                             atByte: dispatch.atByte,
                             url: dispatch.url,
-                            token: dispatch.token
+                            token: dispatch.token, authorization: authorization
                         )
                     }
                 }
@@ -1095,7 +1097,7 @@ final class VideoDetailViewModel {
                         await VideoCachePreloader.shared.restartPreloadIfNeeded(
                             videoId: restartContext.videoId,
                             url: restartContext.url,
-                            token: restartContext.token,
+                            token: restartContext.token, authorization: authorization,
                             startPosition: restartContext.startPosition,
                             duration: restartContext.duration
                         )
@@ -1299,6 +1301,7 @@ final class VideoDetailViewModel {
             imageCache: ImageCache.shared,
             seekInterval: sponsorBlockSettings.seekInterval,
             authToken: authState.token,
+            authorization: authState.authorization,
             onPlay: { [weak self] in
                 self?.player?.play()
                 self?.nowPlaying?.refresh()
@@ -1337,7 +1340,7 @@ final class VideoDetailViewModel {
         guard !isAirPlayAssetActive,
               let player, let video,
               let url = URL(string: video.mediaUrl),
-              let token = authState.token else { return }
+              let token = authState.playbackToken else { return }
         Task { await switchToAirPlayAsset(player: player, video: video, url: url, token: token) }
     }
 
@@ -1774,7 +1777,7 @@ final class VideoDetailViewModel {
     private func startVLCPlayback() async {
         guard let video,
               let url = URL(string: video.mediaUrl),
-              let token = authState.token,
+              let token = authState.playbackToken,
               let proxyURL = await proxiedURL(for: url, token: token, forAirPlay: false) else { return }
 
         self.vlcMediaURL = proxyURL
@@ -1903,11 +1906,11 @@ final class VideoDetailViewModel {
         if let video,
            CodecSupport.requiredPlayer(for: video.streams) == .avPlayer,
            let url = URL(string: video.mediaUrl),
-           let token = authState.token {
+           let token = authState.playbackToken {
             await VideoCachePreloader.shared.startPreloadWithRetry(
                 videoId: video.youtubeId,
                 url: url,
-                token: token,
+                token: token, authorization: authState.authorization,
                 startPosition: video.position,
                 duration: Double(video.duration)
             )

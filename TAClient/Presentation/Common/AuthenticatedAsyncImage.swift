@@ -46,7 +46,7 @@ struct AuthenticatedAsyncImage: View {
 
         loadTask?.cancel()
         loadTask = Task {
-            let loaded = await ImageCache.shared.image(for: imageURL, token: authState.token)
+            let loaded = await ImageCache.shared.image(for: imageURL, token: authState.token, authorization: authState.authorization)
             if !Task.isCancelled {
                 self.image = loaded
             }
