@@ -3,14 +3,23 @@ import SwiftUI
 @main
 struct UIReviewPreviewApp: App {
     @State private var preview = UIReviewPreviewContext()
-    @State private var previewColorScheme: ColorScheme?
+    @State private var previewColorScheme: ColorScheme? = ProcessInfo.processInfo.arguments.contains("--review-dark") ? .dark : nil
+    private let reviewScreen = ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--review-screen=") }?.split(separator: "=").last.map(String.init)
 
     var body: some Scene {
         WindowGroup {
             @Bindable var router = preview.router
 
             NavigationStack(path: $router.path) {
-                VideoListScreen(make: preview.makeVideoListViewModel)
+                Group {
+                    if reviewScreen == "login" {
+                        LoginScreen { LoginViewModel(authRepository: preview.repository, router: preview.router) }
+                    } else if reviewScreen == "search" {
+                        SearchScreen(make: preview.makeSearchViewModel)
+                    } else {
+                        VideoListScreen(make: preview.makeVideoListViewModel)
+                    }
+                }
                     .navigationDestination(for: Route.self) { route in
                         switch route {
                         case .videoList:
@@ -54,6 +63,7 @@ struct UIReviewPreviewApp: App {
                     .accessibilityLabel("Preview appearance")
                 }
                 .font(.caption2)
+                .dynamicTypeSize(...DynamicTypeSize.large)
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 4)

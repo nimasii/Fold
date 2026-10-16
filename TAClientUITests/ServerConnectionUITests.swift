@@ -12,7 +12,7 @@ final class ServerConnectionUITests: XCTestCase {
         attach(app, "01-connection-setup")
         server.tap()
         server.typeText("http://127.0.0.1:18079")
-        app.buttons["Sign in on server"].tap()
+        app.buttons["connection.sign-in"].tap()
         let finish = app.buttons["Finish"]
         XCTAssertTrue(finish.waitForExistence(timeout: 10))
         let fixtureLogin = app.webViews.links["Sign in to fixture"]
@@ -32,7 +32,7 @@ final class ServerConnectionUITests: XCTestCase {
         app.buttons["More"].tap()
         app.buttons["Log Out"].tap()
         app.buttons.matching(identifier: "Log Out").allElementsBoundByIndex.last!.tap()
-        XCTAssertTrue(app.buttons["Sign in on server"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["connection.sign-in"].waitForExistence(timeout: 10))
     }
 
     @MainActor private func attach(_ app: XCUIApplication, _ name: String) {

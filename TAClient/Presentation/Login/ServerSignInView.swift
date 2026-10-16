@@ -59,9 +59,16 @@ struct ServerSignInView: View {
     }
     var body: some View {
         NavigationStack {
-            VStack(spacing: 8) {
-                Text(String(localized: "login_server_explanation")).font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
-                Text(browser.url.host ?? "").font(.caption.monospaced())
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(browser.url.host ?? "", systemImage: "lock.shield")
+                        .font(.subheadline.weight(.semibold))
+                    Text(String(localized: "connection_browser_help"))
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(16)
+                .background(.bar)
                 if browser.blocked { Text(String(localized: "login_redirect_blocked")).font(.caption).foregroundStyle(.red) }
                 if let error = viewModel.errorMessage { Text(error).font(.caption).foregroundStyle(.red).padding(.horizontal) }
                 ServerBrowserSurface(browser: browser)

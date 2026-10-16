@@ -77,34 +77,27 @@ struct SortFilterMenu: View {
 
     var body: some View {
         Menu {
-            // Sort section
             Section(String(localized: "sort_section_title")) {
-                Picker(selection: $sortOption) {
-                    ForEach(SortOption.allCases, id: \.self) { option in
-                        Text(option.label).tag(option)
+                ForEach(SortOption.allCases, id: \.self) { option in
+                    Button { sortOption = option } label: {
+                        if sortOption == option { Label(option.label, systemImage: "checkmark") }
+                        else { Text(option.label) }
                     }
-                } label: {
-                    Text(String(localized: "sort_section_title"))
+                    .accessibilityLabel(option.label)
                 }
-
-                Button {
-                    sortAscending.toggle()
-                } label: {
-                    Label(
-                        String(localized: sortAscending ? "sort_ascending" : "sort_descending"),
-                        systemImage: sortAscending ? "arrow.up" : "arrow.down"
-                    )
+                Button { sortAscending.toggle() } label: {
+                    Label(String(localized: sortAscending ? "sort_ascending" : "sort_descending"),
+                          systemImage: sortAscending ? "arrow.up" : "arrow.down")
                 }
+                .accessibilityLabel(String(localized: sortAscending ? "sort_ascending" : "sort_descending"))
             }
-
-            // Filter section
             Section(String(localized: "filter_section_title")) {
-                Picker(selection: $watchFilter) {
-                    ForEach(WatchFilter.allCases, id: \.self) { filter in
-                        Text(filter.label).tag(filter)
+                ForEach(WatchFilter.allCases, id: \.self) { filter in
+                    Button { watchFilter = filter } label: {
+                        if watchFilter == filter { Label(filter.label, systemImage: "checkmark") }
+                        else { Text(filter.label) }
                     }
-                } label: {
-                    Text(String(localized: "filter_section_title"))
+                    .accessibilityLabel(filter.label)
                 }
             }
         } label: {
@@ -113,6 +106,7 @@ struct SortFilterMenu: View {
                   : "line.3.horizontal.decrease.circle")
         }
         .accessibilityLabel(String(localized: "sort_filter_button"))
+        .accessibilityValue(sortOption.label + ", " + watchFilter.label)
     }
 
     private var hasActiveFilters: Bool {
