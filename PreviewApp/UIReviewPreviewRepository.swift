@@ -49,7 +49,8 @@ final class UIReviewPreviewRepository: VideoRepositoryProtocol, AuthRepositoryPr
     private(set) var downloads: [DownloadItem] = [
         DownloadItem(youtubeId: "morning", title: "A Quiet Morning in the Mountains", channelName: "Field Notes", channelId: "channel-field-notes", duration: "18:42", published: "Oct 8", status: "pending", message: nil, thumbUrl: "preview://video/morning", vidType: "videos", timestamp: 1),
         DownloadItem(youtubeId: "workshop", title: "Building a Small Wooden Cabin", channelName: "Workshop Journal", channelId: "channel-workshop", duration: "12:08", published: "Oct 7", status: "pending", message: nil, thumbUrl: "preview://video/workshop", vidType: "videos", timestamp: 2),
-        DownloadItem(youtubeId: "kyoto", title: "A Slow Walk Through Kyoto", channelName: "Everyday Atlas", channelId: "channel-everyday-atlas", duration: "09:31", published: "Oct 6", status: "pending", message: nil, thumbUrl: "preview://video/kyoto", vidType: "videos", timestamp: 3)
+        DownloadItem(youtubeId: "kyoto", title: "A Slow Walk Through Kyoto", channelName: "Everyday Atlas", channelId: "channel-everyday-atlas", duration: "09:31", published: "Oct 6", status: "pending", message: nil, thumbUrl: "preview://video/kyoto", vidType: "videos", timestamp: 3),
+        DownloadItem(youtubeId: "ignored-fixture", title: "Ignored Fixture Video", channelName: "Fixture Channel", channelId: "fixture-channel", duration: "02:10", published: "Oct 5", status: "ignore", message: nil, thumbUrl: "preview://video/ignored-fixture", vidType: "videos", timestamp: 4)
     ]
 
     private var channel = Channel(

@@ -182,7 +182,7 @@ struct DownloadQueueView: View {
                     .disabled(viewModel.isStartingDownload || viewModel.filter != "pending" || viewModel.items.isEmpty)
                 }
             }
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
                 if authState.isPrivileged {
                     Button {
                         Task { await viewModel.rescanSubscriptions() }
@@ -197,13 +197,14 @@ struct DownloadQueueView: View {
                     .disabled(viewModel.isRescanningSubscriptions)
                     .accessibilityLabel(String(localized: "download_rescan_button"))
                 }
-
-                Picker(String(localized: "download_queue_title"), selection: Bindable(viewModel).filter) {
-                    Text(String(localized: "download_filter_pending")).tag("pending")
-                    Text(String(localized: "download_filter_ignore")).tag("ignore")
-                }
-                .pickerStyle(.segmented)
-                .fixedSize()
+            }
+            if #available(iOS 26.0, *) {
+                ToolbarItem(placement: .topBarTrailing) { filterPicker }
+                    // The segmented control draws its own surface and selection pill.
+                    // Give it its own toolbar group without a second glass background.
+                    .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .topBarTrailing) { filterPicker }
             }
         }
         .task {
@@ -218,6 +219,16 @@ struct DownloadQueueView: View {
         .onChange(of: viewModel.filter) {
             Task { await viewModel.onFilterChanged() }
         }
+    }
+
+    private var filterPicker: some View {
+        Picker(String(localized: "download_queue_title"), selection: Bindable(viewModel).filter) {
+            Text(String(localized: "download_filter_pending")).tag("pending")
+            Text(String(localized: "download_filter_ignore")).tag("ignore")
+        }
+        .pickerStyle(.segmented)
+        .fixedSize()
+        .accessibilityLabel(String(localized: "download_queue_title"))
     }
 }
 

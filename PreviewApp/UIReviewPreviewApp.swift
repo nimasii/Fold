@@ -92,6 +92,10 @@ final class UIReviewPreviewContext {
         repository = UIReviewPreviewRepository()
         sponsorBlockSettings = SponsorBlockSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         router.onLoginSuccess()
+        if ProcessInfo.processInfo.arguments.contains("--review-screen=downloads") {
+            authState.setPrivileges(isSuperuser: true, isStaff: true)
+            router.navigate(to: .downloadQueue)
+        }
     }
 
     func makeVideoListViewModel() -> VideoListViewModel {
