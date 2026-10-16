@@ -16,7 +16,7 @@ struct VLCPlayerView: UIViewControllerRepresentable {
     var onDoubleTap: ((_ forward: Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onTimeChanged: onTimeChanged, onDoubleTap: onDoubleTap)
+        Coordinator(onTimeChanged: onTimeChanged, onDoubleTap: onDoubleTap, isFullScreen: $isFullScreen)
     }
 
     func makeUIViewController(context: Context) -> VLCPlayerContainerVC {
@@ -31,6 +31,7 @@ struct VLCPlayerView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ vc: VLCPlayerContainerVC, context: Context) {
+        context.coordinator.isFullScreen = $isFullScreen
         context.coordinator.onTimeChanged = onTimeChanged
         context.coordinator.onDoubleTap = onDoubleTap
         vc.doubleTapRecognizer?.isEnabled = onDoubleTap != nil
@@ -51,12 +52,14 @@ struct VLCPlayerView: UIViewControllerRepresentable {
 
 extension VLCPlayerView {
     class Coordinator: NSObject, VLCMediaPlayerDelegate, UIGestureRecognizerDelegate {
+        var isFullScreen: Binding<Bool>
         var onTimeChanged: (Double) -> Void
         var onDoubleTap: ((_ forward: Bool) -> Void)?
         weak var containerVC: VLCPlayerContainerVC?
         private var lastProgressReport: Date = .distantPast
 
-        init(onTimeChanged: @escaping (Double) -> Void, onDoubleTap: ((_ forward: Bool) -> Void)? = nil) {
+        init(onTimeChanged: @escaping (Double) -> Void, onDoubleTap: ((_ forward: Bool) -> Void)? = nil, isFullScreen: Binding<Bool>) {
+            self.isFullScreen = isFullScreen
             self.onTimeChanged = onTimeChanged
             self.onDoubleTap = onDoubleTap
         }
@@ -276,10 +279,17 @@ class VLCPlayerContainerVC: UIViewController {
         if let presented = presentedViewController as? VLCFullScreenVC {
             presented.dismiss(animated: true)
         } else {
+            // The detail screen disappears during full-screen presentation. Publish
+            // ownership first so its normal onDisappear cannot stop the live player.
+            setFullScreenState(true)
             let fullScreenVC = VLCFullScreenVC(containerVC: self)
             fullScreenVC.modalPresentationStyle = .fullScreen
             present(fullScreenVC, animated: true)
         }
+    }
+
+    func setFullScreenState(_ value: Bool) {
+        coordinator?.isFullScreen.wrappedValue = value
     }
 
     func reparentDrawable(to targetView: UIView) {
@@ -341,6 +351,12 @@ private class VLCFullScreenVC: UIViewController {
         guard let containerVC else { return }
         containerVC.reparentDrawable(to: containerVC.view)
         reparentControls(to: containerVC.view)
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        // Clear after the presenting detail screen has reappeared, matching AVKit.
+        containerVC?.setFullScreenState(false)
     }
 
     private func reparentControls(to targetView: UIView) {

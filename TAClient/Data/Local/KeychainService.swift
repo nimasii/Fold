@@ -9,7 +9,7 @@ final class KeychainService {
 
     init(inMemory: Bool = false) {
         #if DEBUG
-        let testing = NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || ProcessInfo.processInfo.arguments.contains("--connection-fixture")
+        let testing = NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || (ProcessInfo.processInfo.arguments.contains("--connection-fixture") || ProcessInfo.processInfo.arguments.contains("--playback-fixture"))
         memory = inMemory || testing ? [:] : nil
         #else
         memory = inMemory ? [:] : nil

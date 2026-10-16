@@ -51,9 +51,11 @@ struct VLCPlayerControls: View {
                     }
                 }
             )
+            .accessibilityIdentifier("vlc.timeline")
 
             HStack {
                 Text(formatTime(isSeeking ? seekValue : state.currentTime))
+                    .accessibilityIdentifier("vlc.elapsed")
                     .font(.caption)
                     .monospacedDigit()
 

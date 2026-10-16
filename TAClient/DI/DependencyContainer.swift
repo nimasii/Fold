@@ -29,7 +29,7 @@ final class DependencyContainer {
     private init() {
         keychainService = KeychainService()
         #if DEBUG
-        let isolated = ProcessInfo.processInfo.arguments.contains("--connection-fixture") || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let isolated = (ProcessInfo.processInfo.arguments.contains("--connection-fixture") || ProcessInfo.processInfo.arguments.contains("--playback-fixture")) || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         authState = AuthState(keychainService: keychainService, loadPersistedCredentials: !isolated)
         #else
         authState = AuthState(keychainService: keychainService)

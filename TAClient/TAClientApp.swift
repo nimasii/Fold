@@ -16,7 +16,7 @@ struct TAClientApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            appContent
                 .environment(container)
                 .environment(container.router)
                 .environment(container.authState)
@@ -29,6 +29,16 @@ struct TAClientApp: App {
                     }
                 }
         }
+    }
+
+    @ViewBuilder private var appContent: some View {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--playback-fixture") {
+            PlaybackParityFixtureView()
+        } else { RootView() }
+        #else
+        RootView()
+        #endif
     }
 
     private func forceLayoutUpdate() {
@@ -87,7 +97,7 @@ struct RootView: View {
         case .search: SearchScreen { container.makeSearchViewModel() }
         case .channelDetail(let id): ChannelDetailScreen { container.makeChannelDetailViewModel(channelId: id) }
         case .downloadQueue: DownloadQueueScreen { container.makeDownloadQueueViewModel() }
-        case .offlineDownloads: OfflineDownloadsView(videoRepository: container.videoRepository)
+        case .offlineDownloads: OfflineDownloadsView(videoRepository: container.videoRepository, playbackSettings: container.sponsorBlockSettings)
         case .playlistList: PlaylistListScreen { container.makePlaylistListViewModel() }
         case .playlistDetail(let id): PlaylistDetailScreen { container.makePlaylistDetailViewModel(playlistId: id) }
         case .settings: SettingsScreen { container.makeSettingsViewModel() }

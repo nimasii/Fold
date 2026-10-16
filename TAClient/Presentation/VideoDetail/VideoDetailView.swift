@@ -26,7 +26,7 @@ struct VideoDetailView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 HStack(spacing: 16) {
-                    if viewModel.isPlaying {
+                    if viewModel.isPlaying || viewModel.isLocalPlayback {
                         Button {
                             viewModel.isPinned.toggle()
                         } label: {
@@ -34,7 +34,7 @@ struct VideoDetailView: View {
                         }
                         .accessibilityLabel(String(localized: "video_detail_pin_player"))
                     }
-                    if let video = viewModel.video {
+                    if !viewModel.isLocalPlayback, let video = viewModel.video {
                         Button {
                             Task { await viewModel.toggleWatched() }
                         } label: {
@@ -44,13 +44,15 @@ struct VideoDetailView: View {
                             ? String(localized: "video_mark_unwatched")
                             : String(localized: "video_mark_watched"))
                     }
-                    Button {
-                        viewModel.showAddToPlaylistSheet = true
-                    } label: {
-                        Image(systemName: "music.note.list")
+                    if !viewModel.isLocalPlayback {
+                        Button {
+                            viewModel.showAddToPlaylistSheet = true
+                        } label: {
+                            Image(systemName: "music.note.list")
+                        }
+                        .accessibilityLabel(String(localized: "video_add_to_playlist"))
                     }
-                    .accessibilityLabel(String(localized: "video_add_to_playlist"))
-                    if authState.isPrivileged {
+                    if !viewModel.isLocalPlayback && authState.isPrivileged {
                         Button {
                             viewModel.showDeleteDialog = true
                         } label: {
@@ -115,28 +117,10 @@ struct VideoDetailView: View {
 
     @ViewBuilder
     private func playerArea(_ video: Video) -> some View {
-#if UI_REVIEW_PREVIEW
-        ZStack {
-            Color(.secondarySystemBackground)
-            VStack(spacing: 10) {
-                Image(systemName: "play.slash.fill")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-                Text("UI Review Preview")
-                    .font(.headline)
-                Text("Playback is not included in this preview.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .multilineTextAlignment(.center)
-            .padding()
-        }
-        .aspectRatio(16.0 / 9.0, contentMode: .fit)
-#else
         VideoPlayerSurface(
             video: video, player: viewModel.player, vlcURL: viewModel.vlcMediaURL,
             isFullScreen: $viewModel.isFullScreen, isPiPActive: $viewModel.isPiPActive,
-            isBuffering: viewModel.isBuffering, startPosition: viewModel.startPosition,
+            isBuffering: viewModel.isBuffering, localArtworkURL: viewModel.localPlayback?.artworkURL, startPosition: viewModel.startPosition,
             playbackError: viewModel.playbackError, seekInterval: viewModel.seekInterval,
             seekFeedback: viewModel.seekFeedback, vlcSponsorBlockSeekTarget: viewModel.vlcSponsorBlockSeekTarget,
             vlcSeekDelta: viewModel.vlcSeekDelta,
@@ -148,7 +132,6 @@ struct VideoDetailView: View {
             onRetry: { viewModel.playbackError = nil; viewModel.startPlayback() },
             overlay: sponsorBlockBanner
         )
-#endif
     }
 
     // MARK: - SponsorBlock Banner
@@ -192,43 +175,52 @@ struct VideoDetailView: View {
     @ViewBuilder
     private func videoDetails(_ video: Video) -> some View {
         VStack(spacing: 16) {
-            OfflineDownloadButton(video: video)
-            VideoInfoSection(video: video) { channelId in
-                viewModel.navigateToChannel(channelId)
-            }
+            if !viewModel.isLocalPlayback { OfflineDownloadButton(video: video) }
+            VideoInfoSection(video: video,
+                onChannelTap: viewModel.isLocalPlayback ? nil : { viewModel.navigateToChannel($0) },
+                localArtwork: viewModel.localPlayback?.artwork,
+                showsStatistics: !viewModel.isLocalPlayback || viewModel.localPlayback?.record.metadata != nil)
 
-            Picker("", selection: $viewModel.selectedTab) {
-                Text(String(localized: "video_detail_description")).tag(0)
-                Text(String(localized: "video_detail_comments")).tag(1)
-                Text(String(localized: "video_detail_similar")).tag(2)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal)
-
-            switch viewModel.selectedTab {
-            case 0:
+            if viewModel.isLocalPlayback {
+                Label(String(localized: "offline_playing_local"), systemImage: "internaldrive")
+                    .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
                 if let description = video.description, !description.isEmpty {
-                    Text(description)
-                        .font(.body)
-                        .padding(.horizontal)
-                } else {
-                    Text("-")
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal)
+                    Text(description).font(.body).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
                 }
-            case 2:
-                SimilarVideosSection(
-                    videos: viewModel.similarVideos,
-                    isLoading: viewModel.isLoadingSimilar,
-                    onVideoTap: { videoId in viewModel.navigateToVideo(videoId) },
-                    onChannelTap: { channelId in viewModel.navigateToChannel(channelId) }
-                )
-                .task { await viewModel.loadSimilarVideos() }
-            default:
-                CommentsSection(
-                    comments: viewModel.comments,
-                    isLoading: viewModel.isLoadingComments
-                )
+            } else {
+                Picker("", selection: $viewModel.selectedTab) {
+                    Text(String(localized: "video_detail_description")).tag(0)
+                    Text(String(localized: "video_detail_comments")).tag(1)
+                    Text(String(localized: "video_detail_similar")).tag(2)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal)
+
+                switch viewModel.selectedTab {
+                case 0:
+                    if let description = video.description, !description.isEmpty {
+                        Text(description)
+                            .font(.body)
+                            .padding(.horizontal)
+                    } else {
+                        Text("-")
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal)
+                    }
+                case 2:
+                    SimilarVideosSection(
+                        videos: viewModel.similarVideos,
+                        isLoading: viewModel.isLoadingSimilar,
+                        onVideoTap: { videoId in viewModel.navigateToVideo(videoId) },
+                        onChannelTap: { channelId in viewModel.navigateToChannel(channelId) }
+                    )
+                    .task { await viewModel.loadSimilarVideos() }
+                default:
+                    CommentsSection(
+                        comments: viewModel.comments,
+                        isLoading: viewModel.isLoadingComments
+                    )
+                }
             }
         }
         .padding(.vertical)
