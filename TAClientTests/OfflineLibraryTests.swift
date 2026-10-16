@@ -225,7 +225,7 @@ extension DataLayerSuite {
         let (_, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
         let router = AppRouter(authState: state)
         router.onAutoLoginUnavailable()
-        #expect(state.isAuthenticated && router.appState == .login)
+        #expect(state.isAuthenticated && router.appState == .authenticated)
     }
     private func artworkData() throws -> Data {
         try Data(contentsOf: #require(Bundle(for: OfflineFixtureBundle.self).url(forResource: "offline-thumbnail", withExtension: "png")))

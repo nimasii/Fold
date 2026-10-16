@@ -87,7 +87,12 @@ final class AppRouter {
     }
 
     /// An unavailable network is not evidence that saved credentials expired.
-    func onAutoLoginUnavailable() { appState = .login }
+    func onAutoLoginUnavailable() {
+        // Keep the restored connection usable for downloads and retry. A temporary
+        // outage must not make a returning owner repeat the sign-in flow.
+        if authState.isAuthenticated { onLoginSuccess() }
+        else { appState = .login }
+    }
 
     func onAutoLoginFailed() {
         authState.handleUnauthorized()

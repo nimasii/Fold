@@ -1,7 +1,7 @@
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from threading import Thread
 import json
-state={'capture':0,'ping':0,'range':0,'csrf':0}
+state={'capture':0,'ping':0,'range':0,'csrf':0,'mode':'online'}
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args): pass
  def send(self,status,body=b'',headers={}):
@@ -20,6 +20,9 @@ class Handler(BaseHTTPRequestHandler):
   if self.path=='/fixture-login':
    self.send_response(302);self.send_header('Set-Cookie','sessionid=fixture; Path=/; HttpOnly');self.send_header('Set-Cookie','csrftoken=fixture; Path=/');self.send_header('Location','/');self.end_headers();return
   if self.path.startswith('/api/'):
+   if state['mode']=='offline':self.close_connection=True;self.connection.close();return
+   if state['mode']=='maintenance':return self.send(503,b'<html>Fixture maintenance</html>',{'Content-Type':'text/html'})
+   if state['mode']=='expired':return self.data(403,{'detail':'Fixture session expired'})
    if 'sessionid=fixture' not in c:return self.data(403,{'detail':'Authentication credentials were not provided.'})
    if self.path.startswith('/api/ping'):state['ping']+=1;return self.data(200,{'response':'pong','user':1,'version':'fixture'})
    if self.path.startswith('/api/user/account'):return self.data(200,{'id':1,'name':'Fixture','is_superuser':False,'is_staff':False})
@@ -32,6 +35,8 @@ class Handler(BaseHTTPRequestHandler):
   html+='<p><small>This test page uses dummy session cookies and no owner credentials.</small></p><a href="http://localhost:18079/capture">Test blocked external redirect</a>'
   self.send(200,html.encode(),{'Content-Type':'text/html'})
  def do_POST(self):
+  if self.path=='/fixture-mode':
+   data=json.loads(self.rfile.read(int(self.headers.get('Content-Length','0'))));state['mode']=data['mode'];return self.data(200,{'mode':state['mode']})
   state['csrf']+=int(self.headers.get('X-CSRFToken')=='fixture')
   self.send(204)
 for port in [18079,2000]:

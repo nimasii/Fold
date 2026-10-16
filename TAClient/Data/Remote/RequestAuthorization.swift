@@ -32,6 +32,19 @@ nonisolated final class RequestAuthorization: @unchecked Sendable {
         "\(url.scheme ?? "")://\(url.host?.lowercased() ?? ""):\(url.port ?? (url.scheme == "https" ? 443 : 80))"
     }
 
+    /// HTTP Origin serialization omits default ports, like the browser. The
+    /// comparison key above deliberately includes them and is not a wire header:
+    /// Django compares Origin against scheme://Host and rejects an added :443.
+    static func csrfOrigin(_ url: URL) -> String {
+        var components = URLComponents()
+        components.scheme = url.scheme
+        components.host = url.host
+        if let port = url.port, !((url.scheme == "https" && port == 443) || (url.scheme == "http" && port == 80)) {
+            components.port = port
+        }
+        return components.string ?? origin(url)
+    }
+
     static func exactHost(_ cookie: HTTPCookie, url: URL) -> Bool {
         cookie.domain.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased() == url.host?.lowercased()
     }
@@ -57,7 +70,7 @@ nonisolated final class RequestAuthorization: @unchecked Sendable {
         if !["GET", "HEAD", "OPTIONS", "TRACE"].contains(request.httpMethod ?? "GET"), !cookies.isEmpty {
             guard let csrf = matching.first(where: { $0.name == "csrftoken" }) else { throw AppError.unauthorized }
             request.setValue(csrf.value, forHTTPHeaderField: "X-CSRFToken")
-            request.setValue(Self.origin(baseURL), forHTTPHeaderField: "Origin")
+            request.setValue(Self.csrfOrigin(baseURL), forHTTPHeaderField: "Origin")
             request.setValue(baseURL.absoluteString, forHTTPHeaderField: "Referer")
         }
     }
@@ -65,7 +78,8 @@ nonisolated final class RequestAuthorization: @unchecked Sendable {
     /// All native requests stop redirects, including same-host gateway handoffs.
     /// Authentication handoffs happen only in the visible sign-in browser.
     static func isAuthenticationFailure(_ response: HTTPURLResponse) -> Bool {
-        [401, 403].contains(response.statusCode) || (300...399).contains(response.statusCode) || response.mimeType == "text/html"
+        [401, 403].contains(response.statusCode) || (300...399).contains(response.statusCode) ||
+            ((200...299).contains(response.statusCode) && response.mimeType == "text/html")
     }
 }
 
