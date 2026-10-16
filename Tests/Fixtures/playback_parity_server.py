@@ -27,7 +27,7 @@ class Handler(BaseHTTPRequestHandler):
             with lock: body=json.dumps(state).encode()
             return self.send(200, body, Content_Type='application/json')
         name=self.path.removeprefix('/')
-        if name not in ('parity-h264.mp4', 'parity-vp9.webm'): return self.send(404)
+        if name not in ('parity-h264.mp4', 'parity-vp9.webm', 'conversion-long-vp9.webm'): return self.send(404)
         with lock:
             state['mediaRequests']+=1
             offline=state['offline']
@@ -35,7 +35,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get('Cookie') != 'sessionid=fixture':
             with lock: state['unauthorized']+=1
             return self.send(401)
-        data=(root/name).read_bytes()
+        data=((Path(__file__).resolve().parents[2] / 'TAClientTests/Fixtures' / name) if name == 'conversion-long-vp9.webm' else root/name).read_bytes()
         mime='video/webm' if name.endswith('webm') else 'video/mp4'
         headers={'Content_Type':mime, 'Accept_Ranges':'bytes'}
         requested=self.headers.get('Range')

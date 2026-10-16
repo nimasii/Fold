@@ -3,7 +3,7 @@ import XCTest
 /// Runs the shipping target, including MobileVLCKit. No UI_REVIEW_PREVIEW branches.
 final class PlaybackParityUITests: XCTestCase {
     @MainActor func testAVKitStreamingAndDownloadedControls() async throws { try await compare(vlc: false) }
-    @MainActor func testVLCStreamingAndDownloadedControls() async throws { try await compare(vlc: true) }
+    @MainActor func testVP9StreamAndAppleCompatibleDownload() async throws { try await compare(vlc: true) }
 
     @MainActor private func compare(vlc: Bool) async throws {
         continueAfterFailure = false
@@ -20,12 +20,18 @@ final class PlaybackParityUITests: XCTestCase {
         app.navigationBars.buttons.element(boundBy: 0).tap()
         app.buttons["Online video"].tap()
         try await exercise(app, vlc: vlc, name: "online")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        app.terminate()
+        app.launchArguments.removeAll { $0 == "--playback-fixture-reset" }
+        XCUIDevice.shared.orientation = .portrait
         try await mode(offline: true)
         let before = try await counts()
-        app.buttons["Downloads"].tap()
-        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
-        try await exercise(app, vlc: vlc, name: "downloaded-server-offline")
+        app.launch()
+        XCTAssertTrue(app.buttons["Downloads"].waitForExistence(timeout: 10)); app.buttons["Downloads"].tap()
+        let restoredCard = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Production Playback Comparison")).firstMatch
+        XCTAssertTrue(restoredCard.waitForExistence(timeout: 10))
+        try await Task.sleep(for: .seconds(1))
+        restoredCard.tap()
+        try await exercise(app, vlc: false, name: vlc ? "downloaded-converted-vp9" : "downloaded-server-offline")
         app.navigationBars.buttons.element(boundBy: 0).tap()
         let after = try await counts()
         XCTAssertEqual(before["mediaRequests"], after["mediaRequests"], "Local playback must make zero media requests")
@@ -73,6 +79,8 @@ final class PlaybackParityUITests: XCTestCase {
             capture(app, "avkit-\(name)-inline")
             app.sliders["Current position"].adjust(toNormalizedSliderPosition: 0.5)
             let sought = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label MATCHES %@", "0:0[4-8].*"), object: elapsed)
+            showControls(app, vlc: false)
+            let seekTree = XCTAttachment(string: app.debugDescription); seekTree.name = "native-after-seek"; seekTree.lifetime = .keepAlways; add(seekTree)
             let seekResult = await XCTWaiter.fulfillment(of: [sought], timeout: 5)
             XCTAssertEqual(seekResult, .completed)
             app.buttons["Fullscreen Button"].tap()
@@ -92,9 +100,9 @@ final class PlaybackParityUITests: XCTestCase {
     }
     @MainActor private func showControls(_ app: XCUIApplication, vlc: Bool) {
         let button = app.buttons[vlc ? "Full Screen" : "Fullscreen Button"]
-        if !button.isHittable {
+        if !button.isHittable || (!vlc && !app.staticTexts["Elapsed Time"].exists) {
             let surface = app.otherElements["video.player.surface"].firstMatch
-            surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
+            surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: vlc ? 0.35 : 0.75)).tap()
         }
     }
     @MainActor private func capture(_ app: XCUIApplication, _ name: String) {

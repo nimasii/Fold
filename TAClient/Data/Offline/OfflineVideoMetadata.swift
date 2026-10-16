@@ -53,6 +53,6 @@ extension OfflineRecord {
                      watched: false, progress: duration > 0 ? min(100, position / Double(duration) * 100) : 0,
                      position: position, viewCount: metadata?.views ?? 0, likeCount: metadata?.likes ?? 0,
                      mediaSize: bytes, vidType: metadata?.videoType ?? "videos", category: [], tags: [],
-                     streams: metadata?.streams.map(\.value) ?? codecs.map { StreamInfo(type: "video", codec: $0, bitrate: 0, width: nil, height: nil) }, sponsorblock: [], playlists: [])
+                     streams: (playbackStreams ?? metadata?.streams)?.map(\.value) ?? codecs.map { StreamInfo(type: "video", codec: $0, bitrate: 0, width: nil, height: nil) }, sponsorblock: [], playlists: [])
     }
 }

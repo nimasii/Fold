@@ -6,6 +6,9 @@ final class OfflineLibrary {
     private(set) var storageError: String?
     private(set) var refreshingDetails: Set<UUID> = []
     private(set) var artworkRevision = 0
+    private(set) var preparationProgress: [UUID: Double] = [:]
+    @ObservationIgnored private let preparer = OfflineMediaPreparer()
+    @ObservationIgnored private var preparationTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let authState: AuthState
     @ObservationIgnored let disk: OfflineDiskStore?
     @ObservationIgnored private let delegate: OfflineTransferDelegate?
@@ -26,7 +29,7 @@ final class OfflineLibrary {
             var loaded = try store.load()
             guard Set(loaded.map(\.id)).count == loaded.count else { throw OfflineFailure.storage }
             for i in loaded.indices {
-                if loaded[i].status == .downloading {
+                if loaded[i].status.isActive {
                     loaded[i].status = .interrupted; loaded[i].attempt = nil; loaded[i].bytes = 0
                 } else if loaded[i].status == .ready && !store.exists(loaded[i]) {
                     loaded[i].status = .failed; loaded[i].failure = .missingFile; loaded[i].bytes = 0
@@ -50,7 +53,7 @@ final class OfflineLibrary {
         session = delegate.map { URLSession(configuration: configuration, delegate: $0, delegateQueue: queue) }
         delegate?.owner = self
     }
-    deinit { session?.invalidateAndCancel(); artworkTasks.values.forEach { $0.cancel() } }
+    deinit { session?.invalidateAndCancel(); artworkTasks.values.forEach { $0.cancel() }; preparationTasks.values.forEach { $0.cancel() } }
 
     var totalSize: String { ByteCountFormatter.string(fromByteCount: records.filter { $0.status == .ready }.reduce(0) { $0 + $1.bytes }, countStyle: .file) }
     func record(for video: Video) -> OfflineRecord? {
@@ -63,7 +66,7 @@ final class OfflineLibrary {
     }
     @discardableResult func enqueue(_ video: Video) -> UUID? {
         if let existing = record(for: video) {
-            if existing.status != .ready && existing.status != .downloading { retry(existing.id) }
+            if existing.status != .ready && !existing.status.isActive { retry(existing.id) }
             return existing.id
         }
         guard let auth = authState.authorization, let url = URL(string: video.mediaUrl),
@@ -82,7 +85,7 @@ final class OfflineLibrary {
     func retry(_ id: UUID) {
         guard let i = records.firstIndex(where: { $0.id == id }), records[i].status != .ready,
               let disk, let session else { return }
-        if let attempt = records[i].attempt, tasks[attempt] != nil { return }
+        if records[i].status.isActive, records[i].attempt != nil { return }
         do {
             guard let auth = authState.authorization, let url = URL(string: records[i].origin + records[i].mediaPath) else { throw OfflineFailure.signIn }
             let request = try Self.request(url: url, authorization: auth)
@@ -120,18 +123,18 @@ final class OfflineLibrary {
     func cancel(_ id: UUID) { interrupt(id, status: .canceled) }
     func pauseAll() {
         artworkTasks.values.forEach { $0.cancel() }; artworkTasks.removeAll(); artworkAttempts.removeAll()
-        for record in records where record.status == .downloading { interrupt(record.id, status: .interrupted) }
+        for record in records where record.status.isActive { interrupt(record.id, status: .interrupted) }
     }
     func authorizationChanged() {
         artworkTasks.values.forEach { $0.cancel() }; artworkTasks.removeAll(); artworkAttempts.removeAll()
-        for record in records where record.status == .downloading {
+        for record in records where record.status.isActive {
             if record.attempt.flatMap({ authorizations[$0]?.id }) != authState.authorization?.id {
                 interrupt(record.id, status: .needsSignIn)
             }
         }
     }
     private func interrupt(_ id: UUID, status: OfflineStatus) {
-        guard let i = records.firstIndex(where: { $0.id == id }), records[i].status == .downloading else { return }
+        guard let i = records.firstIndex(where: { $0.id == id }), records[i].status.isActive else { return }
         release(records[i].attempt, cancel: true)
         artworkTasks[id]?.cancel(); artworkTasks[id] = nil; artworkAttempts[id] = nil
         records[i].status = status; records[i].attempt = nil; records[i].bytes = 0
@@ -211,34 +214,68 @@ final class OfflineLibrary {
     private func index(_ description: String?) -> Int? {
         let parts = description?.split(separator: "/") ?? []
         guard parts.count == 2, let id = UUID(uuidString: String(parts[0])), let attempt = UUID(uuidString: String(parts[1])) else { return nil }
-        return records.firstIndex { $0.id == id && $0.attempt == attempt && $0.status == .downloading }
+        return records.firstIndex { $0.id == id && $0.attempt == attempt && $0.status.isActive }
     }
     func progress(_ description: String?, bytes: Int64, total: Int64) {
-        guard let i = index(description) else { return }
+        guard let i = index(description), records[i].status == .downloading else { return }
         records[i].bytes = max(0, bytes); records[i].totalBytes = max(0, total)
         if Date().timeIntervalSince(lastProgressSave) >= 1 { lastProgressSave = .now; persist() }
     }
     func finish(_ description: String?, response: HTTPURLResponse?, staged: URL) {
         guard let disk else { return }
-        defer { disk.discard(staged) }
-        guard let i = index(description) else { return }
+        guard let i = index(description), records[i].status == .downloading else { disk.discard(staged); return }
         guard let attempt = records[i].attempt, let auth = authorizations[attempt], auth.isActive,
-              auth.id == authState.authorization?.id else { fail(description, failure: .signIn); return }
+              auth.id == authState.authorization?.id else { disk.discard(staged); fail(description, failure: .signIn); return }
         guard let response, let url = response.url, RequestAuthorization.origin(url) == records[i].origin else {
-            fail(description, failure: .server); return
+            disk.discard(staged); fail(description, failure: .server); return
         }
-        if RequestAuthorization.isAuthenticationFailure(response) { fail(description, failure: .signIn); return }
-        guard response.statusCode == 200 else { fail(description, failure: .server); return }
+        if RequestAuthorization.isAuthenticationFailure(response) { disk.discard(staged); fail(description, failure: .signIn); return }
+        guard response.statusCode == 200 else { disk.discard(staged); fail(description, failure: .server); return }
+        let output: URL
         do {
-            let (kind, size) = try disk.commit(staged, record: records[i], response: response)
-            records[i].kind = kind; records[i].bytes = size; records[i].totalBytes = size
-            records[i].status = .ready; records[i].attempt = nil; records[i].failure = nil
-            release(attempt)
-            if !persist() {
-                try? disk.remove(records[i]); records[i].status = .failed; records[i].failure = .storage
-                records[i].bytes = 0
+            _ = try disk.validateTransfer(staged, response: response)
+            output = try disk.preparationOutput()
+        } catch { disk.discard(staged); fail(description, failure: (error as? OfflineFailure) ?? .storage); return }
+        let expectedDuration = records[i].duration
+        records[i].status = .preparing
+        guard persist() else { disk.discard(staged); disk.discard(output); fail(description, failure: .storage); return }
+        preparationTasks[attempt] = Task { [weak self, disk, preparer] in
+            defer {
+                disk.discard(staged); disk.discard(output)
+                // Avoid releasing a task's last stored handle while unwinding it.
+                DispatchQueue.main.async { [weak self] in
+                    self?.preparationTasks[attempt] = nil
+                    self?.preparationProgress[attempt] = nil
+                }
             }
-        } catch { fail(description, failure: (error as? OfflineFailure) ?? .storage) }
+            do {
+                let result = try await preparer.prepare(input: staged, output: output, expectedDuration: expectedDuration,
+                    checkSpace: { try disk.checkCapacity($0) },
+                    progress: { [weak self] value in
+                        guard self?.index(description) != nil else { return }
+                        self?.preparationProgress[attempt] = value
+                    })
+                try Task.checkCancellation()
+                guard let self, let i = self.index(description), auth.isActive,
+                      self.authState.authorization?.id == auth.id else { return }
+                let size = Int64(try result.url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
+                do { try disk.commitPrepared(result.url, record: self.records[i]) }
+                catch { throw OfflineFailure.storage }
+                self.records[i].kind = .mp4; self.records[i].bytes = size; self.records[i].totalBytes = size
+                self.records[i].playbackStreams = result.streams
+                self.records[i].nativePlaybackVerified = true
+                self.records[i].status = .ready; self.records[i].attempt = nil; self.records[i].failure = nil
+                self.release(attempt)
+                if !self.persist() {
+                    try? disk.remove(self.records[i]); self.records[i].status = .failed
+                    self.records[i].failure = .storage; self.records[i].bytes = 0
+                }
+            } catch is CancellationError {
+                // Explicit cancel/background/logout owns the persisted terminal state.
+            } catch {
+                self?.fail(description, failure: (error as? OfflineFailure) ?? .conversion)
+            }
+        }
     }
     func fail(_ description: String?, failure: OfflineFailure) {
         guard let i = index(description) else { return }
@@ -253,7 +290,7 @@ final class OfflineLibrary {
     }
     private func release(_ attempt: UUID?, cancel: Bool = false) {
         guard let attempt else { return }
-        if cancel { tasks[attempt]?.cancel() }
+        if cancel { tasks[attempt]?.cancel(); preparationTasks[attempt]?.cancel() }
         tasks[attempt] = nil; authorizations[attempt] = nil
     }
     @discardableResult private func persist() -> Bool {

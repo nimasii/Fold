@@ -59,6 +59,18 @@ nonisolated final class OfflineDiskStore: @unchecked Sendable {
         return destination
     }
     func commit(_ staged: URL, record: OfflineRecord, response: HTTPURLResponse) throws -> (OfflineMediaKind, Int64) {
+        let (kind, size) = try validateTransfer(staged, response: response)
+        try commitPrepared(staged, record: record, kind: kind)
+        return (kind, size)
+    }
+    func preparationOutput() throws -> URL {
+        let output = staging.appendingPathComponent(UUID().uuidString + ".mp4")
+        guard files.createFile(atPath: output.path, contents: nil,
+                               attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication]) else { throw OfflineFailure.storage }
+        do { try protect(output) } catch { discard(output); throw error }
+        return output
+    }
+    func validateTransfer(_ staged: URL, response: HTTPURLResponse) throws -> (OfflineMediaKind, Int64) {
         let size = Int64(try staged.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0)
         guard size > 12, response.expectedContentLength < 0 || response.expectedContentLength == size,
               response.value(forHTTPHeaderField: "Content-Range") == nil else { throw OfflineFailure.invalidMedia }
@@ -68,12 +80,15 @@ nonisolated final class OfflineDiskStore: @unchecked Sendable {
         if header.count >= 8 && Array(header[4..<8]) == Array("ftyp".utf8) { kind = .mp4 }
         else if header.starts(with: [0x1A, 0x45, 0xDF, 0xA3]) { kind = .webm }
         else { throw OfflineFailure.invalidMedia }
+        return (kind, size)
+    }
+    func commitPrepared(_ staged: URL, record: OfflineRecord, kind: OfflineMediaKind = .mp4) throws {
         var candidate = record; candidate.kind = kind
         let target = file(for: candidate)!
-        if files.fileExists(atPath: target.path) { try files.removeItem(at: target) }
+        // A late completion or retry must never replace an existing ready file.
+        guard !files.fileExists(atPath: target.path) else { throw OfflineFailure.storage }
         try files.moveItem(at: staged, to: target)
         do { try protect(target) } catch { try? files.removeItem(at: target); throw error }
-        return (kind, size)
     }
     func discard(_ staged: URL) { try? files.removeItem(at: staged) }
     func remove(_ record: OfflineRecord) throws {

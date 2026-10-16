@@ -1,12 +1,13 @@
 import Foundation
 
 nonisolated enum OfflineStatus: String, Codable {
-    case downloading, ready, canceled, interrupted, failed, needsSignIn
+    case downloading, preparing, ready, canceled, interrupted, failed, needsSignIn
+    var isActive: Bool { self == .downloading || self == .preparing }
     var label: String { String(localized: String.LocalizationValue("offline_status_" + rawValue)) }
 }
 
 nonisolated enum OfflineFailure: String, Codable, Error {
-    case network, storage, invalidMedia, missingFile, signIn, server
+    case network, storage, invalidMedia, missingFile, signIn, server, conversion, unsupportedConversion
     var message: String { String(localized: String.LocalizationValue("offline_error_" + rawValue)) }
 }
 
@@ -31,6 +32,10 @@ nonisolated struct OfflineRecord: Identifiable, Codable, Hashable {
     var attempt: UUID?
     var position: Double = 0
     var metadata: OfflineVideoMetadata?
+    /// Actual private-copy streams. Optional for safe decoding of old manifests;
+    /// refreshing server metadata must never overwrite converted playback codecs.
+    var nativePlaybackVerified: Bool?
+    var playbackStreams: [OfflineVideoMetadata.Stream]?
 
     init(video: Video, origin: String, mediaPath: String) {
         id = UUID(); videoID = video.youtubeId; self.origin = origin; self.mediaPath = mediaPath

@@ -1,51 +1,44 @@
-# Apple-compatible phone downloads: feasibility and implementation scope
+# Apple-compatible private downloads
 
-Investigation branch: `codex/apple-compatible-downloads`, based on the tested session-restoration commit `0d94d3dafab5578d7bd79c8f56cdb2f5e9961bde`. No production download behavior, original media, server configuration or dependency has been changed by this investigation.
+TAClient now prepares new phone copies for the native Apple player without changing Tube Archivist's archived originals or ingestion settings. Compatible MP4 inputs are kept byte-for-byte when runtime video/audio validation succeeds; other supported inputs are converted locally with the already bundled MobileVLCKit 3.7.3.
 
-## Two distinct download stages
+## Transfer and preparation
 
-1. **YouTube → Tube Archivist:** the server's global Format/Format Sort settings select what yt-dlp archives. Its code already merges into an MP4 container, which does not imply H.264/AAC. Current public add-to-queue serializers expose no per-item codec/format override. Changing global ingestion would affect future archive quality/format and would not convert existing archived videos. Do not change this setting for a phone-copy feature.
-2. **Tube Archivist → TAClient:** OfflineLibrary currently downloads the existing media URL into private staging and commits those bytes unchanged. Its MP4/WebM header checks validate the container only. Naming a file `.mp4` does not change its codecs. There is no existing transcoding/derivative route in the public server video API inspected here.
+Authenticated transfers retain the existing exact-origin, no-redirect policy. Complete HTTP 200 responses must pass Content-Length and container checks before entering `preparing`. A serial preparer inspects actual local media, rather than trusting server codec metadata or filename extensions. All input/output paths are protected, UUID-named files inside excluded-from-backup private staging. VLC receives file URLs and encoder options only; no credentials or network media URL enter its conversion path.
 
-Private deployment capabilities are not inferred from public source. No live Umbrel access was performed on the Mac. If a server option is considered, ask the parent task to inspect installed version/custom services, available FFmpeg encoders, hardware acceleration, capacity and authentication through Umbrel Remote/Agent.
+Preparation verifies native playability, drains complete sample streams (including decoded PCM audio and final timestamps), and decodes head/tail video frames. A compatible MP4 passes through unchanged. Otherwise, the derivative uses H.264 and AAC where audio conversion is needed, up to 1920×1080 while preserving source frame rate. Known HDR/rotation that needs unverified conversion is rejected; a natively validated HDR original can remain unchanged.
 
-## Phone-side proof
+The video bitrate target is 1.6 times the measured source video bitrate, or a file-size/duration estimate when that bitrate is unavailable. It has a 256 kb/s floor and a 5 Mb/s ceiling. Thus an 800 kb/s video targets about 1.28 Mb/s, rather than 5 Mb/s. AAC conversion targets 128 kb/s stereo. These are quality/size targets, not promises of identical file size or quality. H.264 can need more space than AV1/VP9, and reencoding is lossy. Already-compatible files have no reencoding cost.
 
-The bundled **MobileVLCKit 3.7.3** already contains a VideoToolbox H.264 encoder and MP4 muxer, and exposes per-media stream-output options. Its narrow `VLCTranscoder` wrapper is intended for subtitle merging; it is not a general MP4 conversion API. However, a file-only VLCMediaPlayer stream-output pipeline can use the same underlying modules.
+The preparer reserves output capacity with mux overhead and checks capacity as encoding proceeds. Unexpected output growth fails preparation. The converter uses a private VLC instance with explicit decoding/mux settings and bounded AVCodec/Dav1d threads. This matters: media-only settings did not prevent tail-frame loss in a silent VP9 fixture, and unbounded AV1 frame threading could produce an audio-only short derivative. MP4 faststart relocation is disabled for local derivatives to avoid an unnecessary full-file copy at close. Teardown and file quiescence precede final codec/duration/completeness validation; full validation can retry for up to 15 seconds while the asynchronous muxer finishes its index. A failed, short or unvalidated output is never marked ready.
 
-`OfflineConversionFeasibilityTests` exercises generated one-second local fixtures:
+## Lifecycle, playback and migration
 
-| Input | AVFoundation native export on this Simulator | Bundled VLC → H.264/AAC MP4 |
-| --- | --- | --- |
-| H.264/AAC MP4 | Yes | Yes |
-| VP9/Opus WebM | No | Yes |
-| VP9/Opus MP4 | No | Yes |
-| AV1/Opus MP4 | No | Yes |
+`preparing` is a persisted, cancelable state with separate progress. Download/preparation cancellation, backgrounding, logout and server replacement revoke the attempt and prevent late completion from committing. Relaunch turns unfinished transfers/preparation into retryable interrupted records and removes orphan staging files. Cancelled work retains no resume-data credentials. Output is atomically moved and marked ready only after successful validation and current-attempt/auth checks.
 
-The AV1 Simulator result is **not** a claim that AV1 is unsupported on Jake's iPhone: his screenshot demonstrates native AV1/Opus playback there. Native export cannot be the sole conversion strategy for media the current device's AVFoundation cannot decode.
+Ready records save actual private-copy streams independently from archived-source metadata. A later server metadata refresh cannot overwrite them. A positive native-verification marker selects the existing AVPlayer/AVPlayerViewController path for these new copies, including otherwise conservatively blacklisted codecs that this device has actually verified. Native controls, fullscreen, PiP, local viewing progress and private artwork retain the production controller path. Streaming engine selection remains unchanged.
 
-The VLC test uses `vcodec=h264,venc=vtenc_h264,vb=5000,fps=30,maxwidth=1920,maxheight=1080,acodec=mp4a,ab=128,channels=2,samplerate=48000`, a file-only MP4 destination, and no display/network output. It verifies actual output track formats (`avc1` and AAC), duration, decoded video frame, fully decoded audio buffers, AVPlayer advancement and precise seek. It byte-compares each source after conversion. All four outputs passed; inputs remained unchanged. The full Simulator unit suite passed **755 tests, zero failures** after adding the two probes. No credential or remote URL enters VLC.
+Existing downloaded files and manifests remain readable and are not automatically converted, replaced or deleted. Legacy copies without the optional fields retain the existing codec-aware AVKit/VLC fallback. Logout keeps ready private copies.
 
-This establishes **feasibility**, not a production guarantee for all files, hardware or long videos. The probe is not wired into the Downloads flow.
+## Verification and limits
 
-## Concrete app-side integration
+The fixtures contain generated test patterns and sine audio only. Coverage includes MP4 H.264/AAC byte preservation, VP9/Opus in MP4 and WebM, AV1/Opus MP4, a two-minute 720p VP9 clip, H.264/Opus conversion and vertical silent VP9. Tests exercise duration mismatch, capacity failure, known HDR handling, cancellation, server switching, interrupted manifest recovery, original-copy preservation, and metadata refresh after native verification.
 
-Recommended target for a broadly compatible phone copy: **MP4, H.264, AAC stereo 48 kHz, up to 1080p/30**, with a roughly 5 Mb/s video / 128 kb/s audio target for converted copies. Keep the archived server original unchanged.
+Simulator UI coverage exercises Preparing → cancel → retry → ready, relaunch with the fixture server unavailable, and native playback/seeking/fullscreen. Separate session UI tests verify real synthetic Keychain persistence and normal expiry/logout. Test result paths and exact final counts are recorded in the task evidence.
 
-1. Continue the existing exact-origin, no-redirect authenticated transfer into protected private staging.
-2. Inspect the downloaded file's actual streams. Reuse verified, already-compatible MP4/H.264/AAC files without reencoding. Missing/stale server metadata must not establish compatibility.
-3. For other supported inputs, convert the private staged source to a separate UUID-named, protected MP4 via the bundled VLC modules. Serialize conversion jobs and expose a separate Preparing phase.
-4. Validate output codecs, video/audio presence, duration/completeness and native playability before atomically committing it as ready. Store actual output streams separately from archived-source metadata so the local player selects AVKit and displays accurate information. A failed output must never be called Apple-compatible or silently substituted with the original.
-5. Keep cancellation/background handling generation-scoped, stop the converter, release its player/delegate, and remove partial output. Reserve space for both source and derivative plus encoding overhead. Keep both excluded from backups and app-private throughout.
-6. Preserve all existing ready downloads. No automatic bulk migration, replacement or deletion. Continue their existing supported playback until an explicitly requested per-copy conversion/redownload is available.
+Physical-iPhone throughput, thermal/battery behavior, hour-long media and general HDR tone mapping are not certified by Simulator tests. Known unverified HDR/rotation conversions fail explicitly instead of pretending to preserve them. This work does not implement a background conversion service; keep TAClient foreground during transfer/preparation. Existing private copies continue to work regardless of the new preparation path.
 
-Before enabling the pipeline, add lifecycle/cancel/logout/server-switch tests, concurrent playback/resource tests, storage exhaustion/corruption checks, and long-media validation on an actual iPhone. Also test HDR/10-bit tone mapping, rotation/vertical video, variable frame rates, silent video and multiple audio streams. The one-second SDR fixtures do not establish these behaviors.
+Final local regression on 2026-10-16: **763 unit tests passed, zero failures**, iPhone 17 Pro / iOS 26.5, signed Simulator build. Result bundle: `test_sim_2026-10-16T18-39-00-008Z_pid17905_824bece1.xcresult`. The three-format short-media matrix also passed five repetitions (15 fixture executions), result `test_sim_2026-10-16T18-37-57-166Z_pid17905_571e6c6c.xcresult`. The earlier standalone VLC feasibility converter is superseded by tests of the shipping preparer and its stricter validation.
 
-## Costs and permissions
+`CompatibleDownloadsUITests.testPreparationCancelRetryAndNativeOfflinePlayback` passed, result `test_sim_2026-10-16T18-40-51-340Z_pid17905_5f15aa03.xcresult`, retaining five screenshots. Both `PlaybackParityUITests` cases passed in `test_sim_2026-10-16T18-17-06-250Z_pid17905_779def6a.xcresult`, covering native inline/fullscreen controls and zero offline media requests. The separate new preparation UI test was still failing in that earlier bundle due to an over-specific native accessibility seek assertion; its corrected assertion and precise AVPlayer unit seeks pass in the final results above.
 
-- On-phone conversion avoids an Umbrel service, new server permissions and new decoder dependencies. It consumes phone battery/CPU/GPU, adds a preparation wait, and requires extra temporary storage. Conversion may reduce quality; a H.264 derivative may be substantially larger than AV1/VP9. At 5 Mb/s video + 128 kb/s audio, a one-hour copy is roughly **2.3 GB**, before variable-rate differences. No real-device throughput claim has been made.
-- A server-generated derivative remains an optional alternative when phone cost is unacceptable. It would need a separate authenticated service/integration, read-only source access, a separate bounded derivative cache, one job at a time, cancellation/expiry, and an authenticated range-capable download endpoint. It must not replace archived originals or weaken gateway/app authentication.
-- Installing that service, granting source/cache access, creating credentials, changing global yt-dlp format settings, or converting existing library content requires approval of a concrete scope. None has been performed or requested in this pass. The app-only route does not require those server changes.
+In that Simulator run, the 30-second 720p VP9 fixture grew from 2,942,109 to 5,166,288 bytes and prepared/validated/played/seeked in 6.58 seconds; the two-minute fixture grew from 11,930,155 to 20,743,742 bytes in 17.57 seconds. These generated-fixture measurements are evidence of bounded behavior, not physical-device performance estimates.
+
+## Server scope and alternatives
+
+Tube Archivist's Format/Format Sort settings control YouTube → server ingestion. Its public ingestion code already merges into MP4, which does not establish H.264/AAC. Those settings do not convert existing archived media copied to a phone. The inspected public video API has no per-copy derivative conversion endpoint.
+
+No server setting, original archived file, credential, access grant or service was changed. There is no new app dependency. A future server derivative alternative would require separately approved read-only source access, a separate bounded cache and authenticated range-serving integration. It could move conversion load off the phone but is not needed for the app-side path implemented here.
 
 ## Primary sources checked
 

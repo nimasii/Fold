@@ -3416,6 +3416,70 @@
           }
         }
       }
+    },
+    "offline_status_preparing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preparing for Apple player"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Подготовка для плеера Apple"
+          }
+        }
+      }
+    },
+    "offline_prepare_help": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep TAClient open while downloading and preparing. Conversion can use extra battery and temporary storage."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не закрывайте TAClient во время загрузки и подготовки. Конвертация требует дополнительного заряда и временного места."
+          }
+        }
+      }
+    },
+    "offline_error_conversion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This copy could not be prepared. Retry with TAClient open. The server original is unchanged."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не удалось подготовить копию. Повторите попытку, не закрывая TAClient. Оригинал на сервере не изменён."
+          }
+        }
+      }
+    },
+    "offline_error_unsupportedConversion": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This format needs a conversion path that is not yet supported safely. The server original is unchanged."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Безопасная конвертация этого формата пока не поддерживается. Оригинал на сервере не изменён."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

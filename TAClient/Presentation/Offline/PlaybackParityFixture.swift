@@ -47,7 +47,8 @@ private final class PlaybackParityFixture {
     let isVLC: Bool
     init() {
         let args = ProcessInfo.processInfo.arguments
-        isVLC = args.contains("--playback-fixture-vlc")
+        let long = args.contains("--playback-fixture-long")
+        isVLC = args.contains("--playback-fixture-vlc") || long
         auth = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
         let base = URL(string: "http://127.0.0.1:18083")!
         let cookie = HTTPCookie(properties: [.name: "sessionid", .value: "fixture", .domain: "127.0.0.1", .path: "/"])!
@@ -56,16 +57,16 @@ private final class PlaybackParityFixture {
         let defaults = UserDefaults(suiteName: "PlaybackParityFixture")!
         settings = SponsorBlockSettings(defaults: defaults)
         settings.seekInterval = 15; settings.doubleTapToSeek = true
-        let filename = isVLC ? "parity-vp9.webm" : "parity-h264.mp4"
+        let filename = long ? "conversion-long-vp9.webm" : isVLC ? "parity-vp9.webm" : "parity-h264.mp4"
         video = Video(youtubeId: isVLC ? "parity-vp9" : "parity-h264", title: "Production Playback Comparison",
             description: "The same generated clip, normal player and settings for streaming and local playback.",
             published: "", publishedShort: "", downloaded: "", downloadedShort: "",
             channelName: "Fixture Studio", channelId: "", channelThumbUrl: nil, thumbUrl: "",
-            mediaUrl: base.appendingPathComponent(filename).absoluteString, duration: 12, durationStr: "0:12",
+            mediaUrl: base.appendingPathComponent(filename).absoluteString, duration: long ? 30 : 12, durationStr: long ? "0:30" : "0:12",
             watched: false, progress: 0, position: 0, viewCount: 0, likeCount: 0, mediaSize: 0,
             vidType: "videos", category: [], tags: [], streams: [StreamInfo(type: "video", codec: isVLC ? "vp9" : "h264", bitrate: 0, width: 640, height: 360)], sponsorblock: [], playlists: [])
         let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("PlaybackParityFixture-v1").appendingPathComponent(isVLC ? "vp9" : "h264")
+            .appendingPathComponent("PlaybackParityFixture-v1").appendingPathComponent(long ? "vp9-long" : isVLC ? "vp9" : "h264")
         if args.contains("--playback-fixture-reset") { try? FileManager.default.removeItem(at: root) }
         library = OfflineLibrary(authState: auth, root: root)
     }

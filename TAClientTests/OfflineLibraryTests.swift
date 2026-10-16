@@ -39,20 +39,28 @@ extension DataLayerSuite {
         HTTPURLResponse(url: base.appendingPathComponent("video.mp4"), statusCode: code, httpVersion: nil,
                         headerFields: ["Content-Length": String(size), "Content-Type": mime])!
     }
-    @discardableResult private func ready(_ library: OfflineLibrary) throws -> OfflineRecord {
-        let id = try #require(library.enqueue(TestData.video()))
+    @discardableResult private func ready(_ library: OfflineLibrary) async throws -> OfflineRecord {
+        let id = try #require(library.enqueue(TestData.video(duration: 2)))
         let pending = try #require(library.records.first { $0.id == id })
         let file = try staged(library)
         let size = try Data(contentsOf: file).count
         library.finish(description(pending), response: response(size), staged: file)
+        await waitForPreparation(library)
         let record = try #require(library.records.first)
         #expect(record.status == .ready)
         return record
     }
 
-    @Test func privateNonPurgeableStorageAndManifestNeverContainCredentials() throws {
+    private func waitForPreparation(_ library: OfflineLibrary) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(10))
+        while library.records.contains(where: { $0.status == .preparing }) && ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    @Test func privateNonPurgeableStorageAndManifestNeverContainCredentials() async throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let record = try ready(library)
+        let record = try await ready(library)
         let file = try #require(library.localURL(for: record))
         #expect(file.isFileURL && file.path.hasPrefix(root.path))
         #expect(try root.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
@@ -73,9 +81,9 @@ extension DataLayerSuite {
         #expect(Bundle.main.object(forInfoDictionaryKey: "UIFileSharingEnabled") as? Bool != true)
         #expect(Bundle.main.object(forInfoDictionaryKey: "LSSupportsOpeningDocumentsInPlace") as? Bool != true)
     }
-    @Test func restartKeepsReadyFilesWithoutAnySavedServerAuthentication() throws {
+    @Test func restartKeepsReadyFilesWithoutAnySavedServerAuthentication() async throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let saved = try ready(library)
+        let saved = try await ready(library)
         library.savePosition(saved.id, seconds: 1)
         let signedOut = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
         let restored = OfflineLibrary(authState: signedOut, root: root)
@@ -84,19 +92,19 @@ extension DataLayerSuite {
         #expect(restored.localURL(for: record)?.isFileURL == true)
         #expect(!signedOut.isAuthenticated)
     }
-    @Test func duplicateRequestsNeverCreateAnotherTransferOrCopy() throws {
+    @Test func duplicateRequestsNeverCreateAnotherTransferOrCopy() async throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let first = library.enqueue(TestData.video())
+        let first = library.enqueue(TestData.video(duration: 2))
         let attempt = library.records.first?.attempt
-        #expect(library.enqueue(TestData.video()) == first)
+        #expect(library.enqueue(TestData.video(duration: 2)) == first)
         #expect(library.records.count == 1 && library.records.first?.attempt == attempt)
-        let record = try ready(library)
-        #expect(library.enqueue(TestData.video()) == record.id)
+        let record = try await ready(library)
+        #expect(library.enqueue(TestData.video(duration: 2)) == record.id)
         #expect(library.records.count == 1)
     }
     @Test func interruptionAndCancelDiscardLatePartialFilesAndPersistRetryableState() throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let id = try #require(library.enqueue(TestData.video()))
+        let id = try #require(library.enqueue(TestData.video(duration: 2)))
         let pending = try #require(library.records.first)
         library.progress(description(pending), bytes: 10, total: 100)
         let temporary = try staged(library)
@@ -115,17 +123,17 @@ extension DataLayerSuite {
     }
     @Test func abandonedInFlightRecordBecomesInterruptedAfterRelaunch() throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        library.enqueue(TestData.video())
+        library.enqueue(TestData.video(duration: 2))
         let (restored, _, _) = make(root)
         #expect(restored.records.first?.status == .interrupted)
         #expect(restored.records.first?.attempt == nil)
         library.pauseAll()
     }
-    @Test func localRemovalDeletesOnlyOurMediaAndMetadata() throws {
+    @Test func localRemovalDeletesOnlyOurMediaAndMetadata() async throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
         let sentinel = root.appendingPathComponent("unrelated.txt")
         try Data("keep".utf8).write(to: sentinel)
-        let record = try ready(library)
+        let record = try await ready(library)
         let local = try #require(library.localURL(for: record))
         library.remove(record.id)
         #expect(library.records.isEmpty)
@@ -133,9 +141,9 @@ extension DataLayerSuite {
         #expect(try String(contentsOf: sentinel, encoding: .utf8) == "keep")
         #expect(try library.disk?.load().isEmpty == true)
     }
-    @Test func unauthorizedResponseRequiresLoginButPreservesCompletedCopies() throws {
+    @Test func unauthorizedResponseRequiresLoginButPreservesCompletedCopies() async throws {
         let (library, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let saved = try ready(library)
+        let saved = try await ready(library)
         let router = AppRouter(authState: state); router.onLoginSuccess()
         library.enqueue(TestData.video(youtubeId: "second"))
         let pending = try #require(library.records.first)
@@ -148,7 +156,7 @@ extension DataLayerSuite {
     }
     @Test func changedOrRevokedAuthorizationCannotFinishAnOldTransfer() throws {
         let (library, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        library.enqueue(TestData.video())
+        library.enqueue(TestData.video(duration: 2))
         let pending = try #require(library.records.first)
         state.handleUnauthorized(); library.authorizationChanged()
         let file = try staged(library)
@@ -169,7 +177,7 @@ extension DataLayerSuite {
     }
     @Test func truncatedOrInvalidFilesAreNeverMarkedReady() throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        library.enqueue(TestData.video())
+        library.enqueue(TestData.video(duration: 2))
         var pending = try #require(library.records.first)
         var file = try staged(library)
         library.finish(description(pending), response: response(999999), staged: file)
@@ -189,22 +197,23 @@ extension DataLayerSuite {
         try Data("corrupt".utf8).write(to: manifest)
         let library = OfflineLibrary(authState: state, root: root)
         #expect(library.storageError != nil)
-        #expect(library.enqueue(TestData.video()) == nil)
+        #expect(library.enqueue(TestData.video(duration: 2)) == nil)
         #expect(try String(contentsOf: manifest, encoding: .utf8) == "corrupt")
     }
-    @Test func failedMediaMoveCannotPublishReadyEntry() throws {
+    @Test func failedMediaMoveCannotPublishReadyEntry() async throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        library.enqueue(TestData.video()); let pending = try #require(library.records.first)
+        library.enqueue(TestData.video(duration: 2)); let pending = try #require(library.records.first)
         let file = try staged(library); let size = try Data(contentsOf: file).count
         try FileManager.default.removeItem(at: root.appendingPathComponent("Media"))
         try Data().write(to: root.appendingPathComponent("Media"))
         library.finish(description(pending), response: response(size), staged: file)
+        await waitForPreparation(library)
         #expect(library.records.first?.status == .failed && library.records.first?.failure == .storage)
     }
     @Test(.timeLimit(.minutes(1)))
     func localPlayerStartsAndSeeksWithNoAuthenticationOrNetworkSession() async throws {
         let (library, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let record = try ready(library)
+        let record = try await ready(library)
         state.handleUnauthorized()
         let source = LocalVideoPlayback(record: record, library: library)
         let playback = VideoDetailViewModel(videoId: record.id.uuidString, videoRepository: LocalVideoRepository(source: source),
@@ -240,9 +249,9 @@ extension DataLayerSuite {
             mediaSize: v.mediaSize, vidType: v.vidType, category: v.category, tags: v.tags, streams: v.streams,
             sponsorblock: v.sponsorblock, playlists: v.playlists)
     }
-    @Test func presentationSnapshotRoundTripsAndLegacyManifestRemainsPlayable() throws {
+    @Test func presentationSnapshotRoundTripsAndLegacyManifestRemainsPlayable() async throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        var record = try ready(library)
+        var record = try await ready(library)
         record.metadata = OfflineVideoMetadata(video: videoWithArtwork("https://example.com/thumb.png"), origin: record.origin)
         try library.disk?.save([record])
         let stored = try #require(library.disk?.load().first)
@@ -257,9 +266,9 @@ extension DataLayerSuite {
         #expect(library.localURL(for: legacy)?.isFileURL == true)
         #expect(legacy.displayVideo.title == record.title && legacy.displayVideo.duration > 0)
     }
-    @Test func optionalArtworkPersistsPrivatelyAcrossSignedOutRestartAndIsRemovedLocally() throws {
+    @Test func optionalArtworkPersistsPrivatelyAcrossSignedOutRestartAndIsRemovedLocally() async throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let record = try ready(library); let data = try artworkData()
+        let record = try await ready(library); let data = try artworkData()
         let disk = try #require(library.disk)
         try disk.saveArtwork(data, id: record.id, kind: .thumbnail)
         try disk.saveArtwork(data, id: record.id, kind: .channel)
@@ -302,9 +311,9 @@ extension DataLayerSuite {
             try await OfflineArtworkFetch.data(url: url, authorization: auth, configuration: MockResponse.makeConfiguration())
         }
     }
-    @Test func invalidArtworkCannotReplaceStoredPixels() throws {
+    @Test func invalidArtworkCannotReplaceStoredPixels() async throws {
         let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let record = try ready(library); let disk = try #require(library.disk)
+        let record = try await ready(library); let disk = try #require(library.disk)
         try disk.saveArtwork(artworkData(), id: record.id, kind: .thumbnail)
         let url = try #require(library.thumbnailURL(record.id)); let before = try Data(contentsOf: url)
         #expect(throws: OfflineFailure.self) { try disk.saveArtwork(Data(repeating: 1, count: 100), id: record.id, kind: .thumbnail) }
@@ -313,7 +322,7 @@ extension DataLayerSuite {
     }
     @Test func explicitMetadataRefreshRequiresSameServerAndDoesNotWriteProgress() async throws {
         let (library, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
-        let record = try ready(library); let repository = MockVideoRepository()
+        let record = try await ready(library); let repository = MockVideoRepository()
         var reads = 0; var writes = 0
         repository.getVideoHandler = { id in reads += 1; return videoWithArtwork("https://example.com/thumb.png") }
         repository.updateProgressHandler = { _, _ in writes += 1 }
@@ -325,10 +334,66 @@ extension DataLayerSuite {
         #expect(reads == 1 && writes == 0)
         #expect(library.localURL(for: record) != nil)
     }
+    @Test func cancelAndConnectionSwitchDuringPreparationCannotPublishLateOutput() async throws {
+        let (library, state, root) = make(); defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
+        let saved = try await ready(library)
+        let original = try Data(contentsOf: #require(library.localURL(for: saved)))
+        for switching in [false, true] {
+            let id = try #require(library.enqueue(TestData.video(youtubeId: "preparing-\(switching)", duration: 30)))
+            let pending = try #require(library.records.first { $0.id == id })
+            let input = try #require(Bundle(for: OfflineFixtureBundle.self).url(forResource: "conversion-long-vp9", withExtension: "webm"))
+            let temporary = root.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.copyItem(at: input, to: temporary)
+            let staged = try #require(library.disk).stage(temporary)
+            library.finish(description(pending), response: response(try Data(contentsOf: staged).count), staged: staged)
+            #expect(library.records.first?.status == .preparing)
+            let attempt = library.records.first?.attempt
+            library.retry(id)
+            #expect(library.records.first?.attempt == attempt)
+            if switching {
+                try state.setExistingToken("synthetic-other", serverURL: URL(string: "https://other.example")!)
+                library.authorizationChanged()
+            } else { library.cancel(id) }
+            let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+            while FileManager.default.fileExists(atPath: staged.path) && ContinuousClock.now < deadline {
+                try await Task.sleep(for: .milliseconds(20))
+            }
+            #expect(library.records.first?.status == (switching ? .needsSignIn : .canceled))
+            #expect(!FileManager.default.fileExists(atPath: staged.path))
+            #expect(try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("Staging").path).isEmpty)
+            #expect(try Data(contentsOf: #require(library.localURL(for: saved))) == original)
+        }
+    }
+    @Test func preparingManifestRecoversWithoutChangingAnExistingCopy() async throws {
+        let (library, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try await ready(library)
+        let bytes = try Data(contentsOf: #require(library.localURL(for: saved)))
+        let disk = try #require(library.disk)
+        var interrupted = OfflineRecord(video: TestData.video(youtubeId: "crashed", duration: 2), origin: "https://example.com:443", mediaPath: "/crashed.mp4")
+        interrupted.status = .preparing; interrupted.attempt = UUID()
+        try disk.save([saved, interrupted])
+        _ = try disk.preparationOutput()
+        let restored = OfflineLibrary(authState: state, root: root)
+        #expect(restored.records.first { $0.id == interrupted.id }?.status == .interrupted)
+        #expect(restored.records.first { $0.id == interrupted.id }?.attempt == nil)
+        #expect(try Data(contentsOf: #require(restored.localURL(for: saved))) == bytes)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.appendingPathComponent("Staging").path).isEmpty)
+    }
+    @Test func completedCopyUsesActualCodecsAfterServerMetadataRefresh() async throws {
+        let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
+        let saved = try await ready(library)
+        let repository = MockVideoRepository()
+        repository.getVideoHandler = { _ in TestData.video(duration: 2, streams: [.init(type: "video", codec: "vp9", bitrate: 0, width: 320, height: 180)]) }
+        await library.refreshDetails(saved.id, using: repository)
+        let record = try #require(library.records.first)
+        #expect(record.metadata?.streams.first?.codec == "vp9")
+        #expect(record.displayVideo.streams.first?.codec == "h264")
+        #expect(CodecSupport.requiredPlayer(for: record.displayVideo.streams) == .avPlayer)
+    }
     @Test func revokedArtworkRequestsUnwindBeforeReleasingTheirTaskHandles() async throws {
         for _ in 0..<20 {
             let (library, state, root) = make()
-            library.enqueue(TestData.video())
+            library.enqueue(TestData.video(duration: 2))
             state.handleUnauthorized() // Revoke before the queued artwork task starts.
             await Task.yield()
             try await Task.sleep(for: .milliseconds(5))
