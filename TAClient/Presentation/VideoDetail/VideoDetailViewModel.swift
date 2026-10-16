@@ -36,6 +36,9 @@ final class VideoDetailViewModel {
     private var skipBannerTask: Task<Void, Never>?
     private var skippedSegmentIds: Set<String> = []  // track skipped segments by "start-end" key
 
+    let localPlayback: LocalVideoPlayback?
+    var isLocalPlayback: Bool { localPlayback != nil }
+
     private let videoRepository: VideoRepositoryProtocol
     private let playlistRepository: PlaylistRepositoryProtocol?
     private let authState: AuthState
@@ -272,7 +275,8 @@ final class VideoDetailViewModel {
     private var sessionCoordinator: PlayerSessionCoordinator?
     private var nowPlaying: NowPlayingController?
 
-    init(videoId: String, videoRepository: VideoRepositoryProtocol, authState: AuthState, router: AppRouter, sponsorBlockSettings: SponsorBlockSettings = SponsorBlockSettings(), playlistRepository: PlaylistRepositoryProtocol? = nil) {
+    init(videoId: String, videoRepository: VideoRepositoryProtocol, authState: AuthState, router: AppRouter, sponsorBlockSettings: SponsorBlockSettings = SponsorBlockSettings(), playlistRepository: PlaylistRepositoryProtocol? = nil, localPlayback: LocalVideoPlayback? = nil) {
+        self.localPlayback = localPlayback
         self.videoId = videoId
         self.videoRepository = videoRepository
         self.playlistRepository = playlistRepository
@@ -353,14 +357,16 @@ final class VideoDetailViewModel {
     var vlcSeekDelta: Double?
 
     var startPosition: Double {
-        video?.position ?? 0
+        guard let video else { return 0 }
+        if isLocalPlayback && video.position >= Double(video.duration) - 0.25 { return 0 }
+        return video.position
     }
 
     func startPlayback() {
         guard !isPlaying && !isBuffering, let video else { return }
 
         isBuffering = true
-        let requiredPlayer = CodecSupport.requiredPlayer(for: video.streams)
+        let requiredPlayer = playbackEngine(for: video)
         playerType = requiredPlayer
 
         switch requiredPlayer {
@@ -371,12 +377,26 @@ final class VideoDetailViewModel {
         }
     }
 
+    private func playbackEngine(for video: Video) -> PlayerType {
+        CodecSupport.requiredPlayer(for: video.streams,
+            fileExtension: localPlayback?.mediaURL?.pathExtension ?? URL(string: video.mediaUrl)?.pathExtension)
+    }
+
     // MARK: - AVPlayer
 
     /// Orchestrates AVPlayer startup. Split into four behaviour-preserving
     /// helpers so the caller reads as a sequence of named steps instead of a
     /// 150-line block: asset → player item → observers → session + now-playing.
     private func startAVPlayback() {
+        if let localPlayback {
+            guard let video, let url = localPlayback.mediaURL, url.isFileURL,
+                  FileManager.default.fileExists(atPath: url.path) else {
+                handlePlaybackFailure(message: OfflineFailure.missingFile.message)
+                return
+            }
+            beginAVPlayback(with: AVURLAsset(url: url), video: video)
+            return
+        }
         guard let video,
               let url = URL(string: video.mediaUrl),
               let token = authState.playbackToken else { return }
@@ -421,6 +441,7 @@ final class VideoDetailViewModel {
         let playerItem = AVPlayerItem(asset: asset, automaticallyLoadedAssetKeys: [.tracks, .duration])
         configurePlayerItemAppetite(playerItem)
         let avPlayer = AVPlayer(playerItem: playerItem)
+        if isLocalPlayback { avPlayer.allowsExternalPlayback = false }
         let directAssetForLog = progressStateLock.withLock { self.isUsingDirectAsset }
         logger.notice("[Start] actionAtItemEnd=\(avPlayer.actionAtItemEnd.rawValue) startPosition=\(self.startPosition)s duration=\(video.duration)s isUsingDirectAsset=\(directAssetForLog)")
         logger.info("[Mem] start playback rss=\(MemoryDiagnostics.residentMBString())")
@@ -1040,7 +1061,8 @@ final class VideoDetailViewModel {
     /// asset-swap path can re-register them on the replacement item.
     private func registerPlayerObservers(player avPlayer: AVPlayer, videoId cachedVideoId: String, duration: Double) {
         observePlayerStatus(avPlayer, videoId: cachedVideoId, duration: duration)
-        let authorization = authState.authorization
+        let authorization = isLocalPlayback ? nil : authState.authorization
+        let usesNetworkCache = !isLocalPlayback
 
         // 1s UI observer: fast-cadence updates for the lock-screen scrubber
         // (nowPlaying.refresh) + cache-health telemetry. logCacheHealth has
@@ -1055,6 +1077,7 @@ final class VideoDetailViewModel {
                 Task { @MainActor in
                     self.nowPlaying?.refresh()
                 }
+                guard usesNetworkCache else { return }
                 // Reseed trigger: if playback has jumped far outside the cached
                 // `.main` region (large forward or backward scrub), ask the
                 // preloader to drop and re-anchor `.main` at the new byte.
@@ -1119,7 +1142,7 @@ final class VideoDetailViewModel {
         // don't want to pretend the save succeeded when it didn't, so
         // `lastSavedPosition` (which the ViewModel reads as "confirmed
         // persisted") only advances on success.
-        let saveInterval = CMTime(seconds: 30, preferredTimescale: 600)
+        let saveInterval = CMTime(seconds: isLocalPlayback ? 10 : 30, preferredTimescale: 600)
         saveProgressObserver = avPlayer.addPeriodicTimeObserver(forInterval: saveInterval, queue: progressQueue) { [weak self, weak avPlayer] time in
             guard let self, let avPlayer else { return }
             let seconds = time.seconds
@@ -1135,7 +1158,7 @@ final class VideoDetailViewModel {
             }
             self.progressStateLock.unlock()
             guard shouldSave else { return }
-            VideoCachePreloader.shared.store.updatePlaybackPosition(videoId: cachedVideoId, seconds: seconds, duration: duration)
+            if usesNetworkCache { VideoCachePreloader.shared.store.updatePlaybackPosition(videoId: cachedVideoId, seconds: seconds, duration: duration) }
             Task { [weak self] in
                 guard let self else { return }
                 let attemptedPosition = seconds
@@ -1300,8 +1323,9 @@ final class VideoDetailViewModel {
             video: video,
             imageCache: ImageCache.shared,
             seekInterval: sponsorBlockSettings.seekInterval,
-            authToken: authState.token,
-            authorization: authState.authorization,
+            authToken: isLocalPlayback ? nil : authState.token,
+            authorization: isLocalPlayback ? nil : authState.authorization,
+            localArtworkURL: localPlayback?.artworkURL,
             onPlay: { [weak self] in
                 self?.player?.play()
                 self?.nowPlaying?.refresh()
@@ -1337,7 +1361,7 @@ final class VideoDetailViewModel {
     /// custom `itacache://` scheme and never see request headers, so they get
     /// a local-network URL on the auth proxy, which adds the token for them.
     private func handleAirPlayBecameActive() {
-        guard !isAirPlayAssetActive,
+        guard !isLocalPlayback, !isAirPlayAssetActive,
               let player, let video,
               let url = URL(string: video.mediaUrl),
               let token = authState.playbackToken else { return }
@@ -1775,6 +1799,16 @@ final class VideoDetailViewModel {
     // MARK: - VLC Player
 
     private func startVLCPlayback() async {
+        guard isBuffering else { return }
+        if let localPlayback {
+            guard let url = localPlayback.mediaURL, url.isFileURL,
+                  FileManager.default.fileExists(atPath: url.path) else {
+                handlePlaybackFailure(message: OfflineFailure.missingFile.message)
+                return
+            }
+            vlcMediaURL = url
+            return
+        }
         guard let video,
               let url = URL(string: video.mediaUrl),
               let token = authState.playbackToken,
@@ -1869,20 +1903,20 @@ final class VideoDetailViewModel {
             progressStateLock.unlock()
             let seconds = player.currentTime().seconds
             if seconds.isFinite && seconds > 0 && seconds > lastSaved + 0.5 {
-                Task { await saveProgress(position: seconds) }
+                persistPositionOnStop(seconds)
             }
             player.pause()
             self.player = nil
             cachingResourceLoader = nil
             let vid = videoId
-            Task { await VideoCachePreloader.shared.cancelPreload(videoId: vid) }
+            if !isLocalPlayback { Task { await VideoCachePreloader.shared.cancelPreload(videoId: vid) } }
         }
 
         // Stop VLC
         if vlcMediaURL != nil {
             if lastVLCPosition > 0 {
                 let position = lastVLCPosition
-                Task { await saveProgress(position: position) }
+                persistPositionOnStop(position)
             }
             vlcMediaURL = nil
             lastVLCPosition = 0
@@ -1890,6 +1924,14 @@ final class VideoDetailViewModel {
 
         isAirPlayAssetActive = false
         stopAuthProxy()
+    }
+
+    private func persistPositionOnStop(_ seconds: Double) {
+        if let localPlayback {
+            localPlayback.library.savePosition(localPlayback.record.id, seconds: seconds)
+        } else {
+            Task { await saveProgress(position: seconds) }
+        }
     }
 
     func loadVideo() async {
@@ -1903,8 +1945,8 @@ final class VideoDetailViewModel {
         }
 
         // Start preloading for AVPlayer videos
-        if let video,
-           CodecSupport.requiredPlayer(for: video.streams) == .avPlayer,
+        if !isLocalPlayback, let video,
+           playbackEngine(for: video) == .avPlayer,
            let url = URL(string: video.mediaUrl),
            let token = authState.playbackToken {
             await VideoCachePreloader.shared.startPreloadWithRetry(
@@ -1920,6 +1962,7 @@ final class VideoDetailViewModel {
     }
 
     func loadComments() async {
+        guard !isLocalPlayback else { return }
         isLoadingComments = true
         do {
             comments = try await videoRepository.getComments(videoId: videoId)

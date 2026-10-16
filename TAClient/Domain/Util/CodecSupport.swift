@@ -12,7 +12,10 @@ enum CodecSupport {
 
     private static let unsupportedAudioCodecs: Set<String> = []
 
-    static func requiredPlayer(for streams: [StreamInfo]) -> PlayerType {
+    static func requiredPlayer(for streams: [StreamInfo], fileExtension: String? = nil) -> PlayerType {
+        // Older downloads may lack stream metadata. Use the same conservative
+        // WebM fallback for a remote URL and a private local file.
+        if streams.isEmpty && fileExtension?.lowercased() == "webm" { return .vlcPlayer }
         for stream in streams {
             let codec = stream.codec.lowercased()
             if stream.type.lowercased() == "video" && unsupportedVideoCodecs.contains(codec) {

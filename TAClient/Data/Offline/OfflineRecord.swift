@@ -39,8 +39,5 @@ nonisolated struct OfflineRecord: Identifiable, Codable, Hashable {
         expectedSize = max(0, video.mediaSize); status = .downloading
         metadata = OfflineVideoMetadata(video: video, origin: origin)
     }
-    var requiresVLC: Bool {
-        kind == .webm || codecs.contains { ["vp9", "vp09", "vp8", "vp08"].contains($0.lowercased()) }
-    }
     var formattedSize: String { ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file) }
 }

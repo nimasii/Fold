@@ -206,8 +206,12 @@ extension DataLayerSuite {
         let (library, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
         let record = try ready(library)
         state.handleUnauthorized()
-        let playback = OfflinePlayback(); defer { playback.stop() }
-        await playback.load(record, library: library)
+        let source = LocalVideoPlayback(record: record, library: library)
+        let playback = VideoDetailViewModel(videoId: record.id.uuidString, videoRepository: LocalVideoRepository(source: source),
+            authState: state, router: AppRouter(authState: state), localPlayback: source)
+        defer { playback.stopPlayback() }
+        await playback.loadVideo()
+        playback.startPlayback()
         let player = try #require(playback.player)
         #expect((player.currentItem?.asset as? AVURLAsset)?.url.isFileURL == true)
         let deadline = ContinuousClock.now.advanced(by: .seconds(8))
@@ -215,7 +219,7 @@ extension DataLayerSuite {
         #expect(player.currentTime().seconds >= 0.2)
         #expect(await player.seek(to: CMTime(seconds: 1, preferredTimescale: 600), toleranceBefore: .zero, toleranceAfter: .zero))
         #expect(player.currentTime().seconds >= 0.9)
-        #expect(playback.error == nil)
+        #expect(playback.playbackError == nil)
     }
     @Test func offlineStartupDoesNotClearSavedServerCredentials() {
         let (_, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }

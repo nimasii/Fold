@@ -4,6 +4,8 @@ struct OfflineDownloadsView: View {
     var videoRepository: VideoRepositoryProtocol? = nil
     @Environment(OfflineLibrary.self) private var library
     @Environment(AuthState.self) private var authState
+    @Environment(AppRouter.self) private var router
+    var playbackSettings = SponsorBlockSettings()
     @State private var playing: OfflineRecord?
     @State private var removing: OfflineRecord?
     @State private var showInfo = false
@@ -52,7 +54,7 @@ struct OfflineDownloadsView: View {
                     .accessibilityLabel(String(localized: "offline_info"))
             }
         }
-        .navigationDestination(item: $playing) { record in OfflinePlayerView(record: record) }
+        .navigationDestination(item: $playing) { record in OfflinePlayerScreen(record: record, library: library, authState: authState, router: router, settings: playbackSettings) }
         .confirmationDialog(String(localized: "offline_remove_title"), isPresented: Binding(
             get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
             Button(String(localized: "offline_remove"), role: .destructive) {
@@ -112,58 +114,16 @@ struct OfflineDownloadsView: View {
     }
 }
 
-struct OfflinePlayerView: View {
-    let record: OfflineRecord
-    @Environment(OfflineLibrary.self) private var library
-    @State private var playback = OfflinePlayback()
-    @State private var isFullScreen = false
-    @State private var isPiPActive = false
-    @State private var isPinned = false
-    @State private var isViewVisible = true
-    private var video: Video { record.displayVideo }
+/// Owns the same production view model used by VideoDetailScreen. Init stays side-effect-free.
+struct OfflinePlayerScreen: View {
+    @State private var viewModel: VideoDetailViewModel
 
-    var body: some View {
-        VideoDetailLayout(isPinned: isPinned) {
-            VideoPlayerSurface(
-                video: video, player: playback.player, vlcURL: playback.vlcURL,
-                isFullScreen: $isFullScreen, isPiPActive: $isPiPActive,
-                isBuffering: playback.isLoading, localArtworkURL: library.thumbnailURL(record.id),
-                startPosition: record.position >= Double(record.duration) ? 0 : record.position,
-                playbackError: playback.error, seekInterval: playback.seekInterval,
-                seekFeedback: playback.seekFeedback, vlcSeekDelta: playback.vlcSeekDelta,
-                onTimeChanged: { playback.vlcPosition($0) }, onClearVLCSeekDelta: { playback.clearVLCSeekDelta() },
-                onDoubleTap: playback.doubleTapToSeek ? { playback.seekByInterval(forward: $0) } : nil,
-                onPiPStopped: { if !isViewVisible && !isFullScreen { playback.stop() } },
-                onPlay: startPlayback, onRetry: startPlayback, overlay: EmptyView()
-            )
-        } details: {
-            VStack(spacing: 16) {
-                VideoInfoSection(video: video,
-                    localArtwork: LocalVideoArtwork(thumbnail: library.thumbnailURL(record.id), channel: library.channelArtworkURL(record.id), revision: library.artworkRevision),
-                    showsStatistics: record.metadata != nil)
-                Label(String(localized: "offline_playing_local"), systemImage: "internaldrive")
-                    .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
-                if let description = video.description, !description.isEmpty {
-                    Text(description).font(.body).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
-                }
-            }
-            .padding(.vertical)
-        }
-        .geometryGroup()
-        .navigationTitle(record.title)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { isPinned.toggle() } label: { Image(systemName: isPinned ? "pin.fill" : "pin") }
-                    .accessibilityLabel(String(localized: "video_detail_pin_player"))
-            }
-        }
-        .task { await playback.load(record, library: library) }
-        .onAppear { isViewVisible = true }
-        .onDisappear {
-            isViewVisible = false
-            if !isFullScreen && !isPiPActive { playback.stop() }
-        }
+    init(record: OfflineRecord, library: OfflineLibrary, authState: AuthState, router: AppRouter, settings: SponsorBlockSettings) {
+        let source = LocalVideoPlayback(record: record, library: library)
+        _viewModel = State(wrappedValue: VideoDetailViewModel(
+            videoId: record.id.uuidString, videoRepository: LocalVideoRepository(source: source),
+            authState: authState, router: router, sponsorBlockSettings: settings, localPlayback: source))
     }
-    private func startPlayback() { Task { await playback.load(record, library: library) } }
+
+    var body: some View { VideoDetailView(viewModel: viewModel) }
 }
