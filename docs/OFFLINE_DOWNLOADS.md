@@ -45,3 +45,9 @@ xcodebuild test -scheme ConnectionFlow \
 The server binds only loopback ports 18081 and 18082, serves a generated two-second H.264 clip, and accepts only dummy fixture cookies. Tests exercise real transfer/cancel/retry, interrupted relaunch, signed-out playback after setting the fixture server unavailable, local deletion with zero DELETE requests, 401 and redirect rejection with zero requests reaching the second-origin listener. Light/dark and playback/progress/error screenshots are attached to the result bundle and saved separately in Library.
 
 Owner-server media, physical-device file protection and the VLC decoder path still need normal owner/device validation. No owner credentials or media are read, no server settings change, and no device install or distribution is part of these tests.
+
+## Apple-compatible preparation
+
+New transfers now enter a cancelable Preparing phase before becoming ready. TAClient verifies the actual private file, keeps natively compatible MP4 files unchanged, and prepares other supported inputs locally as H.264/AAC MP4. Bitrate follows the source with a capped allowance rather than a fixed 5 Mbps. Native verification, decoded audio, sample coverage and head/tail video checks must succeed before publishing the copy. Known unverified HDR/rotation conversions fail clearly.
+
+Preparing can add battery use, waiting and temporary storage. Keep the app foreground. Interrupted work is retryable after relaunch. Existing ready copies are retained with their original supported player selection; there is no automatic bulk conversion. See [preparation design and verification](testing/apple-compatible-downloads.md).

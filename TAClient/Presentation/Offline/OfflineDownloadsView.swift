@@ -72,6 +72,7 @@ struct OfflineDownloadsView: View {
                     }
                     Section {
                         Text(String(localized: "offline_transfer_help"))
+                        Text(String(localized: "offline_prepare_help"))
                         Text(String(localized: "offline_sign_in_help"))
                         Text(String(localized: "offline_legacy_artwork_help"))
                     }
@@ -93,8 +94,8 @@ struct OfflineDownloadsView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(record.title).font(.headline)
             Text(record.status.label).font(.subheadline).foregroundStyle(.secondary)
-            if record.status == .downloading {
-                ProgressView(value: record.totalBytes > 0 ? min(1, Double(record.bytes) / Double(record.totalBytes)) : nil)
+            if record.status.isActive {
+                ProgressView(value: record.status == .preparing ? record.attempt.flatMap { library.preparationProgress[$0] } : (record.totalBytes > 0 ? min(1, Double(record.bytes) / Double(record.totalBytes)) : nil))
                     .accessibilityLabel(String(localized: "offline_progress"))
                 Button(String(localized: "offline_cancel"), systemImage: "stop.circle") { library.cancel(record.id) }
                     .accessibilityLabel(String(localized: "offline_cancel"))
@@ -103,7 +104,7 @@ struct OfflineDownloadsView: View {
                 Button(String(localized: "retry"), systemImage: "arrow.clockwise") { library.retry(record.id) }
                     .accessibilityLabel(String(localized: "retry"))
             }
-            Text(String(localized: "offline_transfer_help")).font(.caption).foregroundStyle(.secondary)
+            Text(String(localized: "offline_prepare_help")).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading).padding()
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))

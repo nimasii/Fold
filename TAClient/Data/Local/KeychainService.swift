@@ -2,12 +2,14 @@ import Foundation
 import Security
 
 final class KeychainService {
-    private let serviceName = "ru.mzhukov.TAClient"
-    private let accessGroup = Bundle.main.object(forInfoDictionaryKey: "KeychainAccessGroup") as? String
+    private let serviceName: String
+    private let accessGroup: String?
 
     private var memory: [Key: String]?
 
     init(inMemory: Bool = false) {
+        serviceName = "ru.mzhukov.TAClient"
+        accessGroup = Bundle.main.object(forInfoDictionaryKey: "KeychainAccessGroup") as? String
         #if DEBUG
         let testing = NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || (ProcessInfo.processInfo.arguments.contains("--connection-fixture") || ProcessInfo.processInfo.arguments.contains("--playback-fixture"))
         memory = inMemory || testing ? [:] : nil
@@ -15,6 +17,17 @@ final class KeychainService {
         memory = inMemory ? [:] : nil
         #endif
     }
+
+    #if DEBUG && targetEnvironment(simulator)
+    /// Real persistence for synthetic relaunch tests, isolated from the owner's
+    /// service and access group. This initializer is absent from device builds.
+    init(persistentFixture: Bool) {
+        precondition(persistentFixture)
+        serviceName = "ru.mzhukov.TAClient.synthetic-session-relaunch-v1"
+        accessGroup = nil
+        memory = nil
+    }
+    #endif
 
     enum Key: String {
         case sessionCookies = "session_cookies_v1"

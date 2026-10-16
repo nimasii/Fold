@@ -27,7 +27,14 @@ final class DependencyContainer {
     let router: AppRouter
 
     private init() {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--session-persistence-fixture") {
+            keychainService = KeychainService(persistentFixture: true)
+            if ProcessInfo.processInfo.arguments.contains("--session-persistence-reset") { keychainService.clearAll() }
+        } else { keychainService = KeychainService() }
+        #else
         keychainService = KeychainService()
+        #endif
         #if DEBUG
         let isolated = (ProcessInfo.processInfo.arguments.contains("--connection-fixture") || ProcessInfo.processInfo.arguments.contains("--playback-fixture")) || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         authState = AuthState(keychainService: keychainService, loadPersistedCredentials: !isolated)

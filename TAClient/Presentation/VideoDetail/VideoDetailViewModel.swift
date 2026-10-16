@@ -378,7 +378,8 @@ final class VideoDetailViewModel {
     }
 
     private func playbackEngine(for video: Video) -> PlayerType {
-        CodecSupport.requiredPlayer(for: video.streams,
+        if localPlayback?.record.nativePlaybackVerified == true { return .avPlayer }
+        return CodecSupport.requiredPlayer(for: video.streams,
             fileExtension: localPlayback?.mediaURL?.pathExtension ?? URL(string: video.mediaUrl)?.pathExtension)
     }
 

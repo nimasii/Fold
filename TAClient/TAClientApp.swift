@@ -106,20 +106,6 @@ struct RootView: View {
     }
 
     private func autoLogin() async {
-        do {
-            let isValid = try await container.authRepository.ping()
-            guard !Task.isCancelled, router.path.isEmpty else { return }
-            if isValid {
-                try? await container.authRepository.fetchUserAccount()
-                guard !Task.isCancelled, router.path.isEmpty else { return }
-                router.onLoginSuccess()
-            } else {
-                router.onAutoLoginFailed()
-            }
-        } catch {
-            guard !Task.isCancelled, router.path.isEmpty else { return }
-            if let error = error as? AppError, case .unauthorized = error { router.onAutoLoginFailed() }
-            else { router.onAutoLoginUnavailable() }
-        }
+        await SessionRestorer.restore(authState: container.authState, repository: container.authRepository, router: router)
     }
 }
