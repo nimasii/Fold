@@ -31,6 +31,7 @@ final class NowPlayingController {
     private let onPause: () -> Void
     private let onSeek: (TimeInterval) -> Void
     private let authToken: String?
+    private let authorization: RequestAuthorization?
 
     // MARK: - Private state
 
@@ -49,6 +50,7 @@ final class NowPlayingController {
         imageCache: ImageCache,
         seekInterval: Int,
         authToken: String? = nil,
+        authorization: RequestAuthorization? = nil,
         onPlay: @escaping () -> Void,
         onPause: @escaping () -> Void,
         onSeek: @escaping (TimeInterval) -> Void
@@ -58,6 +60,7 @@ final class NowPlayingController {
         self.imageCache = imageCache
         self.seekInterval = seekInterval
         self.authToken = authToken
+        self.authorization = authorization
         self.onPlay = onPlay
         self.onPause = onPause
         self.onSeek = onSeek
@@ -108,9 +111,10 @@ final class NowPlayingController {
         // Load artwork asynchronously; refresh on completion.
         if let url = URL(string: video.thumbUrl) {
             let token = authToken
+            let authorization = authorization
             let cache = imageCache
             artworkTask = Task { [weak self] in
-                let image = await cache.image(for: url, token: token)
+                let image = await cache.image(for: url, token: token, authorization: authorization)
                 guard let self, let image, !Task.isCancelled else { return }
                 let size = image.size
                 let artwork = MPMediaItemArtwork(boundsSize: size) { _ in image }

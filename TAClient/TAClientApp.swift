@@ -59,8 +59,6 @@ struct RootView: View {
         case .login:
             NavigationStack {
                 LoginScreen { container.makeLoginViewModel() }
-                    .navigationTitle("Tube Archivist")
-                    .navigationBarTitleDisplayMode(.inline)
             }
         case .authenticated:
             NavigationStack(path: $router.path) {

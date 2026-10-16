@@ -9,6 +9,7 @@ final class SearchViewModel {
     var errorMessage: String?
 
     let router: AppRouter
+    private var queryGeneration = 0
     private var searchTask: Task<Void, Never>?
     private let searchRepository: SearchRepositoryProtocol
 
@@ -17,41 +18,44 @@ final class SearchViewModel {
         self.router = router
     }
 
-    func onQueryChanged() {
-        searchTask?.cancel()
+    func onQueryChanged() { scheduleSearch(debounce: true) }
 
-        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    func submitSearch() { scheduleSearch(debounce: false) }
+
+    private func scheduleSearch(debounce: Bool) {
+        queryGeneration += 1
+        let generation = queryGeneration
+        searchTask?.cancel()
+        errorMessage = nil
+        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuery.isEmpty else {
             videos = []
             hasSearched = false
+            isLoading = false
             return
         }
-
         searchTask = Task {
-            do {
-                try await Task.sleep(for: .milliseconds(300))
-            } catch {
-                return // cancelled
+            if debounce {
+                do { try await Task.sleep(for: .milliseconds(300)) }
+                catch { return }
             }
-
-            await performSearch()
+            await performSearch(query: trimmedQuery, generation: generation)
         }
     }
 
-    private func performSearch() async {
-        let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedQuery.isEmpty else { return }
-
+    private func performSearch(query: String, generation: Int) async {
+        guard generation == queryGeneration, !Task.isCancelled else { return }
         isLoading = true
+        defer { if generation == queryGeneration { isLoading = false } }
         do {
-            let result = try await searchRepository.search(query: trimmedQuery, page: 1)
-            if !Task.isCancelled {
-                videos = result.videos
-                hasSearched = true
-            }
+            let result = try await searchRepository.search(query: query, page: 1)
+            guard generation == queryGeneration, !Task.isCancelled else { return }
+            videos = result.videos
+            hasSearched = true
         } catch {
+            guard generation == queryGeneration, !Task.isCancelled else { return }
             router.handleError(error, errorMessage: &errorMessage)
         }
-        isLoading = false
     }
 
     func removeDeletedVideos() {

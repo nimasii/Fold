@@ -20,6 +20,9 @@ struct ErrorView: View {
                     onRetry()
                 }
                 .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .buttonBorderShape(.capsule)
+                .accessibilityLabel(String(localized: "retry"))
             }
         }
         .padding(24)

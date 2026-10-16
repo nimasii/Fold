@@ -181,6 +181,10 @@ final class StreamingSession: NSObject, URLSessionDataDelegate, @unchecked Senda
         if cancelNow { task.cancel() }
     }
 
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest,
+        completionHandler: @escaping @Sendable (URLRequest?) -> Void) { completionHandler(nil) }
+
     // MARK: - URLSessionDataDelegate
 
     func urlSession(

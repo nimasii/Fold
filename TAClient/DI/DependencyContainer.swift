@@ -27,7 +27,12 @@ final class DependencyContainer {
 
     private init() {
         keychainService = KeychainService()
+        #if DEBUG
+        let isolated = ProcessInfo.processInfo.arguments.contains("--connection-fixture") || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        authState = AuthState(keychainService: keychainService, loadPersistedCredentials: !isolated)
+        #else
         authState = AuthState(keychainService: keychainService)
+        #endif
         apiClient = APIClient(authState: authState)
 
         authRepository = AuthRepositoryImpl(apiClient: apiClient, authState: authState)
@@ -44,7 +49,9 @@ final class DependencyContainer {
     // MARK: - ViewModel Factories
 
     func makeLoginViewModel() -> LoginViewModel {
-        LoginViewModel(authRepository: authRepository, router: router)
+        let model = LoginViewModel(authRepository: authRepository, router: router)
+        model.serverURL = authState.reloginURL ?? ""
+        return model
     }
 
     func makeVideoListViewModel() -> VideoListViewModel {

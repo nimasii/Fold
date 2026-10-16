@@ -301,7 +301,7 @@ actor VideoCachePreloader {
     ///
     /// Logs `[Reseed] main reset @byte=N (was [start..end))` via the store —
     /// PERMANENT telemetry, NOT part of the v0.9.1 diagnostic-cleanup bucket.
-    func reseedMain(videoId: String, atByte: Int64, url: URL, token: String) async {
+    func reseedMain(videoId: String, atByte: Int64, url: URL, token: String, authorization: RequestAuthorization? = nil) async {
         // Guard: videoId mismatch — preloader isn't tracking this video.
         guard store.currentVideoId() == videoId else { return }
 
@@ -523,7 +523,7 @@ actor VideoCachePreloader {
                 try await self.downloadRange(
                     videoId: videoId,
                     url: url,
-                    token: token,
+                    token: token, authorization: authorization,
                     range: downloadStart..<totalSize,
                     into: .main,
                     config: config
@@ -597,7 +597,7 @@ actor VideoCachePreloader {
     func restartPreloadIfNeeded(
         videoId: String,
         url: URL,
-        token: String,
+        token: String, authorization: RequestAuthorization? = nil,
         startPosition: Double,
         duration: Double
     ) async -> Bool {
@@ -640,7 +640,7 @@ actor VideoCachePreloader {
         startPreloadWithRetry(
             videoId: videoId,
             url: url,
-            token: token,
+            token: token, authorization: authorization,
             startPosition: startPosition,
             duration: duration
         )
@@ -667,12 +667,14 @@ actor VideoCachePreloader {
     /// `nil` if the probe is unauthorized (401/403; notification already
     /// posted) or fails for any reason — callers should treat that as an
     /// abort signal for the entire preload.
-    private func probeTotalSize(videoId: String, url: URL, token: String, config: URLSessionConfiguration) async -> (totalSize: Int64, contentType: String)? {
+    private func probeTotalSize(videoId: String, url: URL, token: String, authorization: RequestAuthorization? = nil, config: URLSessionConfiguration) async -> (totalSize: Int64, contentType: String)? {
         var headRequest = URLRequest(url: url)
         headRequest.httpMethod = "HEAD"
-        headRequest.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
+        if let authorization {
+            do { try authorization.apply(to: &headRequest) } catch { return nil }
+        } else { headRequest.setValue("Token \(token)", forHTTPHeaderField: "Authorization") }
 
-        let headSession = URLSession(configuration: config)
+        let headSession = URLSession(configuration: config, delegate: RejectRedirects(), delegateQueue: nil)
         defer { headSession.finishTasksAndInvalidate() }
 
         guard
@@ -682,11 +684,11 @@ actor VideoCachePreloader {
             return nil
         }
 
-        if http.statusCode == 401 || http.statusCode == 403 {
+        if RequestAuthorization.isAuthenticationFailure(http) {
             logger.error("Preload HEAD unauthorized for \(videoId): \(http.statusCode)")
             // Post with `videoId` as `object` so tests can scope
             // observers by sender and avoid cross-test bleed.
-            NotificationCenter.default.post(name: .taAuthUnauthorized, object: videoId)
+            NotificationCenter.default.post(name: .taAuthUnauthorized, object: videoId, userInfo: authorization.map { ["authorizationID": $0.id] })
             return nil
         }
         guard (200...299).contains(http.statusCode) else {
@@ -730,7 +732,7 @@ actor VideoCachePreloader {
     private func downloadRange(
         videoId: String,
         url: URL,
-        token: String,
+        token: String, authorization: RequestAuthorization? = nil,
         range: Range<Int64>,
         into region: CacheStore.RegionID,
         config: URLSessionConfiguration
@@ -738,7 +740,9 @@ actor VideoCachePreloader {
         guard range.lowerBound < range.upperBound else { return }
 
         var request = URLRequest(url: url)
-        request.setValue("Token \(token)", forHTTPHeaderField: "Authorization")
+        if let authorization {
+            do { try authorization.apply(to: &request) } catch { return }
+        } else { request.setValue("Token \(token)", forHTTPHeaderField: "Authorization") }
         // Inclusive end byte for HTTP `Range:` header (RFC 7233).
         let endByte = range.upperBound - 1
         request.setValue("bytes=\(range.lowerBound)-\(endByte)", forHTTPHeaderField: "Range")
@@ -746,9 +750,9 @@ actor VideoCachePreloader {
         let streamer = StreamingSession()
         let (httpResponse, chunks) = try await streamer.stream(request: request, configuration: config)
 
-        if httpResponse.statusCode == 401 || httpResponse.statusCode == 403 {
+        if RequestAuthorization.isAuthenticationFailure(httpResponse) {
             logger.error("Preload (\(region.name)) unauthorized for \(videoId): \(httpResponse.statusCode)")
-            NotificationCenter.default.post(name: .taAuthUnauthorized, object: videoId)
+            NotificationCenter.default.post(name: .taAuthUnauthorized, object: videoId, userInfo: authorization.map { ["authorizationID": $0.id] })
             return
         }
 
@@ -824,7 +828,7 @@ actor VideoCachePreloader {
     /// observe `Task.isCancelled` and exit. Per-task failures (e.g. main
     /// returns 503) do not affect the sibling task because the caller awaits
     /// each with `try?`.
-    private func downloadVideo(videoId: String, url: URL, token: String, startPosition: Double, duration: Double, generation: Int) async {
+    private func downloadVideo(videoId: String, url: URL, token: String, authorization: RequestAuthorization? = nil, startPosition: Double, duration: Double, generation: Int) async {
         // NOTE: `preloadTask` lifecycle is owned by the retry-wrapper Task in
         // `startPreloadWithRetry`. It is NOT cleared here — a prior
         // `defer { preloadTask = nil }` at this point would nil the reference
@@ -839,7 +843,7 @@ actor VideoCachePreloader {
         // unconditional now — previously it was gated on `startPosition > 0`,
         // but with parallel prefix+main downloads we always need the size to
         // pick the prefix/main boundary.
-        guard let probe = await probeTotalSize(videoId: videoId, url: url, token: token, config: config) else {
+        guard let probe = await probeTotalSize(videoId: videoId, url: url, token: token, authorization: authorization, config: config) else {
             // Either an auth failure (notification already posted) or a HEAD
             // failure — either way, abort the preload cleanly.
             return
@@ -883,7 +887,7 @@ actor VideoCachePreloader {
         async let prefixResult: Void = downloadRange(
             videoId: videoId,
             url: url,
-            token: token,
+            token: token, authorization: authorization,
             range: 0..<prefixSize,
             into: .prefix,
             config: config
@@ -897,7 +901,7 @@ actor VideoCachePreloader {
             ? downloadRange(
                 videoId: videoId,
                 url: url,
-                token: token,
+                token: token, authorization: authorization,
                 range: mainStartByte..<totalSize,
                 into: .main,
                 config: config
@@ -954,7 +958,7 @@ actor VideoCachePreloader {
     /// position for this `videoId` (migrated from the removed `startPreload`
     /// fast-path). Otherwise cancels any in-flight preload, clears the store,
     /// and kicks off a fresh download loop with retry on transient errors.
-    func startPreloadWithRetry(videoId: String, url: URL, token: String, startPosition: Double = 0, duration: Double = 0, maxRetries: Int = 2) {
+    func startPreloadWithRetry(videoId: String, url: URL, token: String, authorization: RequestAuthorization? = nil, startPosition: Double = 0, duration: Double = 0, maxRetries: Int = 2) {
         followSessionVideoId = videoId
         if isCacheSufficient(videoId: videoId, startPosition: startPosition, duration: duration) {
             return
@@ -988,7 +992,7 @@ actor VideoCachePreloader {
                     try? await Task.sleep(for: .seconds(delay))
                     if Task.isCancelled { break }
                 }
-                await self.downloadVideo(videoId: videoId, url: url, token: token, startPosition: startPosition, duration: duration, generation: generation)
+                await self.downloadVideo(videoId: videoId, url: url, token: token, authorization: authorization, startPosition: startPosition, duration: duration, generation: generation)
                 // If we got data or task was cancelled, don't retry
                 let cached = self.store.cachedByteCount(videoId: videoId)
                 if cached > 0 { break }

@@ -171,7 +171,7 @@ struct VideoListView: View {
                             Label(String(localized: "video_list_logout"), systemImage: "rectangle.portrait.and.arrow.right")
                         }
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "ellipsis")
                             .overlay(alignment: .topTrailing) {
                                 if viewModel.hasActiveDownloads {
                                     Circle()

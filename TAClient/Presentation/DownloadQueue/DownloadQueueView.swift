@@ -121,31 +121,41 @@ struct DownloadQueueView: View {
         .animation(.default, value: viewModel.downloadProgress.isEmpty)
         .safeAreaInset(edge: .top) {
             if authState.isPrivileged {
-            HStack(spacing: 8) {
-                TextField(String(localized: "download_add_placeholder"), text: Bindable(viewModel).addInput)
-                    .textFieldStyle(.roundedBorder)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.done)
-                    .onSubmit {
-                        Task { await viewModel.addToQueue() }
+                HStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "link").foregroundStyle(.secondary).accessibilityHidden(true)
+                        TextField(String(localized: "download_add_placeholder"), text: Bindable(viewModel).addInput)
+                            .textFieldStyle(.plain)
+                            .accessibilityLabel(String(localized: "download_add_placeholder"))
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
+                            .onSubmit {
+                                Task { await viewModel.addToQueue() }
+                            }
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
 
-                Button {
-                    Task { await viewModel.addToQueue() }
-                } label: {
-                    if viewModel.isAdding {
-                        ProgressView()
-                    } else {
-                        Text(String(localized: "download_add_button"))
+                    Button {
+                        Task { await viewModel.addToQueue() }
+                    } label: {
+                        if viewModel.isAdding {
+                            ProgressView()
+                        } else {
+                            Text(String(localized: "download_add_button"))
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .buttonBorderShape(.capsule)
+                    .accessibilityLabel(String(localized: "download_add_button"))
+                    .disabled(viewModel.addInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isAdding)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.addInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isAdding)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(.bar)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(.bar)
             }
         }
         .navigationTitle(String(localized: "download_queue_title"))

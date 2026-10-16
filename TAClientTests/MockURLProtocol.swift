@@ -132,7 +132,7 @@ enum MockResponse {
     }
 
     static func makeAuthState(token: String? = "test-token", serverURL: String? = "https://ta.example.com") -> AuthState {
-        let keychain = KeychainService()
+        let keychain = KeychainService(inMemory: true)
         keychain.clearAll()
         let authState = AuthState(keychainService: keychain)
         if let token, let serverURL {

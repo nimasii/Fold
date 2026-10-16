@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		2743D9EB2F4C515900A7114D /* MobileVLCKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000022F3FA4BE00000002 /* MobileVLCKit */; };
 		AA000000000000000000000D /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000010000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+        BB0000000000000000000001 /* RequestAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000003; };
+        BB0000000000000000000002 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000004; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +56,8 @@
 		27D79B252F3FA4C100E87BCA /* TAClientTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TAClientTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		27D79B2F2F3FA4C100E87BCA /* TAClientUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TAClientUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA0000010000000000000001 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+        BB0000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TAClient/Data/Remote/RequestAuthorization.swift; sourceTree = SOURCE_ROOT; };
+        BB0000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TAClient/Domain/Util/AppError.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -361,6 +365,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                BB0000000000000000000001,
+                BB0000000000000000000002,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

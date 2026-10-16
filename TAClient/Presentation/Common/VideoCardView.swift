@@ -84,6 +84,7 @@ struct VideoCardView: View {
                         .lineLimit(1)
                 }
             }
+            .buttonStyle(.plain)
             .accessibilityLabel(video.channelName)
         }
         .accessibilityElement(children: .combine)
