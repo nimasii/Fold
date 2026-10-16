@@ -298,6 +298,7 @@ struct VideoDetailView: View {
     @ViewBuilder
     private func videoDetails(_ video: Video) -> some View {
         VStack(spacing: 16) {
+            OfflineDownloadButton(video: video)
             VideoInfoSection(video: video) { channelId in
                 viewModel.navigateToChannel(channelId)
             }

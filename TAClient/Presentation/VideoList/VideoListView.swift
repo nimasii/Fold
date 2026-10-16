@@ -151,6 +151,11 @@ struct VideoListView: View {
                             Label(String(localized: "playlist_list_title"), systemImage: "music.note.list")
                         }
 
+                        Button { viewModel.router.navigate(to: .offlineDownloads) } label: {
+                            Label(String(localized: "offline_title"), systemImage: "arrow.down.circle.fill")
+                        }
+                        .accessibilityLabel(String(localized: "offline_title"))
+
                         Button {
                             viewModel.navigateToDownloadQueue()
                         } label: {

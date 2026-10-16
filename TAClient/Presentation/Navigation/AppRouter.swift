@@ -86,6 +86,9 @@ final class AppRouter {
         appState = .authenticated
     }
 
+    /// An unavailable network is not evidence that saved credentials expired.
+    func onAutoLoginUnavailable() { appState = .login }
+
     func onAutoLoginFailed() {
         authState.handleUnauthorized()
         appState = .login

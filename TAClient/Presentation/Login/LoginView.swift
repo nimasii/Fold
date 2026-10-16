@@ -117,6 +117,12 @@ struct LoginView: View {
                         .accessibilityElement(children: .combine)
                 }
 
+                NavigationLink(value: Route.offlineDownloads) {
+                    Label(String(localized: "offline_open_saved"), systemImage: "arrow.down.circle")
+                }
+                .font(.subheadline.weight(.semibold))
+                .accessibilityLabel(String(localized: "offline_open_saved"))
+
                 Label(String(localized: showToken ? "connection_token_privacy" : "connection_privacy_help"), systemImage: "lock.shield")
                     .font(.footnote).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
