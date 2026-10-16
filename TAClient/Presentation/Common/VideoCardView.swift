@@ -3,12 +3,14 @@ import SwiftUI
 struct VideoCardView: View {
     let video: Video
     var onChannelTap: ((String) -> Void)? = nil
+    var localArtwork: LocalVideoArtwork? = nil
+    var supplementaryText: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             // Thumbnail with overlays
             ZStack(alignment: .bottom) {
-                AuthenticatedAsyncImage(url: video.thumbUrl)
+                AuthenticatedAsyncImage(url: video.thumbUrl, localFileURL: localArtwork?.thumbnail, localRevision: localArtwork?.revision ?? 0)
                     .aspectRatio(16.0 / 9.0, contentMode: .fit)
                     .background(Color(.secondarySystemBackground))
                     .clipped()
@@ -31,13 +33,15 @@ struct VideoCardView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 4))
 
                         // Date badge
-                        Text(video.publishedShort)
-                            .font(.caption2)
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.black.opacity(0.7))
-                            .clipShape(RoundedRectangle(cornerRadius: 4))
+                        if !video.publishedShort.isEmpty {
+                            Text(video.publishedShort)
+                                .font(.caption2)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(.black.opacity(0.7))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
                     }
                 }
                 .padding(8)
@@ -65,29 +69,33 @@ struct VideoCardView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             // Channel info
-            Button {
-                if !video.channelId.isEmpty {
-                    onChannelTap?(video.channelId)
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    AuthenticatedAsyncImage(
-                        url: video.channelThumbUrl,
-                        placeholderColor: Color(.tertiarySystemBackground)
-                    )
-                    .frame(width: 20, height: 20)
-                    .clipShape(Circle())
-
-                    Text(video.channelName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+            Group {
+                if let onChannelTap, !video.channelId.isEmpty {
+                    Button { onChannelTap(video.channelId) } label: { channelLabel }
+                        .buttonStyle(.plain).accessibilityLabel(video.channelName)
+                } else { channelLabel }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(video.channelName)
+            if let supplementaryText {
+                Text(supplementaryText).font(.caption).foregroundStyle(.secondary)
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(video.title), \(video.channelName), \(video.durationStr)")
+    }
+    private var channelLabel: some View {
+        HStack(spacing: 8) {
+            AuthenticatedAsyncImage(
+                url: video.channelThumbUrl,
+                placeholderColor: Color(.tertiarySystemBackground),
+                localFileURL: localArtwork?.channel, localRevision: localArtwork?.revision ?? 0
+            )
+            .frame(width: 20, height: 20)
+            .clipShape(Circle())
+
+            Text(video.channelName)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
     }
 }

@@ -5,8 +5,9 @@ from threading import Thread, Lock, Event
 import json, struct, time
 
 clip = (Path(__file__).resolve().parents[2] / 'TAClientTests/Fixtures/session-playback.mp4').read_bytes()
+artwork = Path(__file__).resolve().parents[2] / 'PreviewApp/Fixtures'
 lock = Lock()
-state = {'offline': False, 'mediaRequests': 0, 'leakRequests': 0, 'deleteRequests': 0}
+state = {'offline': False, 'mediaRequests': 0, 'artworkRequests': 0, 'leakRequests': 0, 'deleteRequests': 0}
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_): pass
@@ -34,13 +35,16 @@ class Handler(BaseHTTPRequestHandler):
             with lock: result = json.dumps(state).encode()
             return self.send(200, result)
         with lock:
-            state['mediaRequests'] += 1
+            state['artworkRequests' if self.path in ('/thumbnail.png', '/channel.png', '/redirect-artwork.png') else 'mediaRequests'] += 1
             offline = state['offline']
         if offline: return self.send(503, b'{"detail":"fixture server offline"}')
         if self.headers.get('Cookie') != 'sessionid=fixture' or self.path == '/unauthorized.mp4':
             return self.send(401, b'{"detail":"fixture authentication required"}')
-        if self.path == '/redirect.mp4':
+        if self.path in ('/redirect.mp4', '/redirect-artwork.png'):
             return self.send(302, b'', Location='http://127.0.0.1:18082/leak')
+        if self.path in ('/thumbnail.png', '/channel.png'):
+            name = 'offline-thumbnail.png' if self.path == '/thumbnail.png' else 'offline-channel.png'
+            return self.send(200, (artwork / name).read_bytes(), 'image/png')
         if self.path == '/slow.mp4':
             padding = bytes(1024 * 1024)
             data = clip + struct.pack('>I4s', len(padding) + 8, b'free') + padding

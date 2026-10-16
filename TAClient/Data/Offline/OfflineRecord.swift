@@ -30,12 +30,14 @@ nonisolated struct OfflineRecord: Identifiable, Codable, Hashable {
     var failure: OfflineFailure?
     var attempt: UUID?
     var position: Double = 0
+    var metadata: OfflineVideoMetadata?
 
     init(video: Video, origin: String, mediaPath: String) {
         id = UUID(); videoID = video.youtubeId; self.origin = origin; self.mediaPath = mediaPath
         title = video.title; channel = video.channelName; duration = video.duration
         codecs = video.streams.filter { $0.type.lowercased() == "video" }.map(\.codec)
         expectedSize = max(0, video.mediaSize); status = .downloading
+        metadata = OfflineVideoMetadata(video: video, origin: origin)
     }
     var requiresVLC: Bool {
         kind == .webm || codecs.contains { ["vp9", "vp09", "vp8", "vp08"].contains($0.lowercased()) }

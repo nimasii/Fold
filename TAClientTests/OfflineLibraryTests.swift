@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import UIKit
 import Testing
 @testable import TAClient
 
@@ -222,5 +223,116 @@ extension DataLayerSuite {
         router.onAutoLoginUnavailable()
         #expect(state.isAuthenticated && router.appState == .login)
     }
+    private func artworkData() throws -> Data {
+        try Data(contentsOf: #require(Bundle(for: OfflineFixtureBundle.self).url(forResource: "offline-thumbnail", withExtension: "png")))
+    }
+    private func videoWithArtwork(_ thumbnail: String, channel: String? = nil) -> Video {
+        let v = TestData.video(streams: [StreamInfo(type: "video", codec: "h264", bitrate: 2_000_000, width: 1920, height: 1080)])
+        return Video(youtubeId: v.youtubeId, title: v.title, description: v.description, published: v.published,
+            publishedShort: v.publishedShort, downloaded: v.downloaded, downloadedShort: v.downloadedShort,
+            channelName: v.channelName, channelId: v.channelId, channelThumbUrl: channel, thumbUrl: thumbnail,
+            mediaUrl: v.mediaUrl, duration: v.duration, durationStr: v.durationStr, watched: v.watched,
+            progress: v.progress, position: v.position, viewCount: v.viewCount, likeCount: v.likeCount,
+            mediaSize: v.mediaSize, vidType: v.vidType, category: v.category, tags: v.tags, streams: v.streams,
+            sponsorblock: v.sponsorblock, playlists: v.playlists)
+    }
+    @Test func presentationSnapshotRoundTripsAndLegacyManifestRemainsPlayable() throws {
+        let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
+        var record = try ready(library)
+        record.metadata = OfflineVideoMetadata(video: videoWithArtwork("https://example.com/thumb.png"), origin: record.origin)
+        try library.disk?.save([record])
+        let stored = try #require(library.disk?.load().first)
+        #expect(stored.metadata?.streams.first?.height == 1080)
+        #expect(stored.displayVideo.published == "2024-01-01")
+        #expect(stored.displayVideo.thumbUrl.isEmpty && stored.displayVideo.mediaUrl.isEmpty)
+        #expect(stored.displayVideo.youtubeId == stored.id.uuidString)
+        var object = try JSONSerialization.jsonObject(with: JSONEncoder().encode(stored)) as! [String: Any]
+        object.removeValue(forKey: "metadata") // Build 4 manifest shape.
+        let legacy = try JSONDecoder().decode(OfflineRecord.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(legacy.metadata == nil && legacy.status == .ready)
+        #expect(library.localURL(for: legacy)?.isFileURL == true)
+        #expect(legacy.displayVideo.title == record.title && legacy.displayVideo.duration > 0)
+    }
+    @Test func optionalArtworkPersistsPrivatelyAcrossSignedOutRestartAndIsRemovedLocally() throws {
+        let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
+        let record = try ready(library); let data = try artworkData()
+        let disk = try #require(library.disk)
+        try disk.saveArtwork(data, id: record.id, kind: .thumbnail)
+        try disk.saveArtwork(data, id: record.id, kind: .channel)
+        let signedOut = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
+        let restored = OfflineLibrary(authState: signedOut, root: root)
+        let thumbnail = try #require(restored.thumbnailURL(record.id))
+        let channel = try #require(restored.channelArtworkURL(record.id))
+        #expect(thumbnail.isFileURL && thumbnail.path.hasPrefix(root.path))
+        #expect(try thumbnail.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        #expect(try channel.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup == true)
+        #expect(UIImage(contentsOfFile: thumbnail.path) != nil)
+        #expect(UIImage(contentsOfFile: channel.path)?.size.width ?? 1000 <= 160)
+        restored.remove(record.id)
+        #expect(!FileManager.default.fileExists(atPath: thumbnail.path))
+        #expect(!FileManager.default.fileExists(atPath: channel.path))
+    }
+    @Test func artworkSnapshotNeverRetainsSignedOrForeignURLs() throws {
+        for raw in ["https://evil.example/thumb.png", "https://example.com:2000/thumb.png", "http://example.com/thumb.png", "https://example.com/thumb.png?token=DUMMY_AUTH_SECRET", "file:///private/example.png", "https://user:secret@example.com/thumb.png"] {
+            let metadata = OfflineVideoMetadata(video: videoWithArtwork(raw, channel: raw), origin: "https://example.com")
+            #expect(metadata.thumbnailPath == nil && metadata.channelArtworkPath == nil)
+            let json = try String(decoding: JSONEncoder().encode(metadata), as: UTF8.self)
+            #expect(!json.contains("DUMMY_AUTH_SECRET") && !json.contains("secret@"))
+        }
+    }
+    @Test func artworkFetcherUsesScopedHeadersAndRejectsOversizedResponseBeforeBody() async throws {
+        let auth = RequestAuthorization(baseURL: base, token: "DUMMY_AUTH_SECRET")
+        let data = try artworkData(); let url = base.appendingPathComponent("thumbnail.png")
+        MockResponse.tearDown(); defer { MockResponse.tearDown() }
+        MockURLProtocol.requestHandler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Length": String(data.count)])!, data)
+        }
+        let result = try await OfflineArtworkFetch.data(url: url, authorization: auth, configuration: MockResponse.makeConfiguration())
+        #expect(result == data)
+        #expect(MockURLProtocol.lastRequest?.value(forHTTPHeaderField: "Authorization") == "Token DUMMY_AUTH_SECRET")
+        #expect(MockURLProtocol.lastRequest?.httpShouldHandleCookies == false)
+        MockURLProtocol.requestHandler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Length": "5000000"])!, Data())
+        }
+        await #expect(throws: OfflineFailure.self) {
+            try await OfflineArtworkFetch.data(url: url, authorization: auth, configuration: MockResponse.makeConfiguration())
+        }
+    }
+    @Test func invalidArtworkCannotReplaceStoredPixels() throws {
+        let (library, _, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
+        let record = try ready(library); let disk = try #require(library.disk)
+        try disk.saveArtwork(artworkData(), id: record.id, kind: .thumbnail)
+        let url = try #require(library.thumbnailURL(record.id)); let before = try Data(contentsOf: url)
+        #expect(throws: OfflineFailure.self) { try disk.saveArtwork(Data(repeating: 1, count: 100), id: record.id, kind: .thumbnail) }
+        #expect(try Data(contentsOf: url) == before)
+        #expect(library.localURL(for: record) != nil)
+    }
+    @Test func explicitMetadataRefreshRequiresSameServerAndDoesNotWriteProgress() async throws {
+        let (library, state, root) = make(); defer { try? FileManager.default.removeItem(at: root) }
+        let record = try ready(library); let repository = MockVideoRepository()
+        var reads = 0; var writes = 0
+        repository.getVideoHandler = { id in reads += 1; return videoWithArtwork("https://example.com/thumb.png") }
+        repository.updateProgressHandler = { _, _ in writes += 1 }
+        await library.refreshDetails(record.id, using: repository)
+        #expect(reads == 1 && writes == 0)
+        #expect(library.records.first?.metadata?.streams.first?.height == 1080)
+        try state.setExistingToken("OTHER_FIXTURE", serverURL: URL(string: "https://other.example")!)
+        await library.refreshDetails(record.id, using: repository)
+        #expect(reads == 1 && writes == 0)
+        #expect(library.localURL(for: record) != nil)
+    }
+    @Test func revokedArtworkRequestsUnwindBeforeReleasingTheirTaskHandles() async throws {
+        for _ in 0..<20 {
+            let (library, state, root) = make()
+            library.enqueue(TestData.video())
+            state.handleUnauthorized() // Revoke before the queued artwork task starts.
+            await Task.yield()
+            try await Task.sleep(for: .milliseconds(5))
+            #expect(library.records.count == 1)
+            library.authorizationChanged()
+            try? FileManager.default.removeItem(at: root)
+        }
+    }
+
 }
 }

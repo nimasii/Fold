@@ -3,6 +3,8 @@ import SwiftUI
 struct VideoInfoSection: View {
     let video: Video
     var onChannelTap: ((String) -> Void)? = nil
+    var localArtwork: LocalVideoArtwork? = nil
+    var showsStatistics: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -12,26 +14,12 @@ struct VideoInfoSection: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             // Channel
-            Button {
-                if !video.channelId.isEmpty {
-                    onChannelTap?(video.channelId)
-                }
-            } label: {
-                HStack(spacing: 8) {
-                    AuthenticatedAsyncImage(
-                        url: video.channelThumbUrl,
-                        placeholderColor: Color(.tertiarySystemBackground)
-                    )
-                    .frame(width: 32, height: 32)
-                    .clipShape(Circle())
-
-                    Text(video.channelName)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                }
+            Group {
+                if let onChannelTap, !video.channelId.isEmpty {
+                    Button { onChannelTap(video.channelId) } label: { channelLabel }
+                        .buttonStyle(.plain).accessibilityLabel(video.channelName)
+                } else { channelLabel }
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(video.channelName)
 
             // Stats/dates + Media info
             ViewThatFits(in: .horizontal) {
@@ -49,18 +37,24 @@ struct VideoInfoSection: View {
     private func datesAndMedia(short: Bool) -> some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 16) {
-                    Label("\(video.viewCount)", systemImage: "eye")
-                    Label("\(video.likeCount)", systemImage: "hand.thumbsup")
+                if showsStatistics {
+                    HStack(spacing: 16) {
+                        Label("\(video.viewCount)", systemImage: "eye")
+                        Label("\(video.likeCount)", systemImage: "hand.thumbsup")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                Text(String(localized: "video_detail_published \(short ? video.publishedShort : video.published)"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "video_detail_downloaded \(short ? video.downloadedShort : video.downloaded)"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if !video.published.isEmpty {
+                    Text(String(localized: "video_detail_published \(short ? video.publishedShort : video.published)"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                if !video.downloaded.isEmpty {
+                    Text(String(localized: "video_detail_downloaded \(short ? video.downloadedShort : video.downloaded)"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if !video.streams.isEmpty {
@@ -94,6 +88,21 @@ struct VideoInfoSection: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize()
+        }
+    }
+    private var channelLabel: some View {
+        HStack(spacing: 8) {
+            AuthenticatedAsyncImage(
+                url: video.channelThumbUrl,
+                placeholderColor: Color(.tertiarySystemBackground),
+                localFileURL: localArtwork?.channel, localRevision: localArtwork?.revision ?? 0
+            )
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
+
+            Text(video.channelName)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
         }
     }
 }
