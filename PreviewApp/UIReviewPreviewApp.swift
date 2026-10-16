@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct UIReviewPreviewApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @State private var preview = UIReviewPreviewContext()
     @State private var previewColorScheme: ColorScheme? = ProcessInfo.processInfo.arguments.contains("--review-dark") ? .dark : nil
     private let reviewScreen = ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--review-screen=") }?.split(separator: "=").last.map(String.init)
@@ -12,7 +13,16 @@ struct UIReviewPreviewApp: App {
 
             NavigationStack(path: $router.path) {
                 Group {
-                    if reviewScreen == "login" {
+                    if reviewScreen == "offline" {
+                        OfflineDownloadsView()
+                            .toolbar {
+                                if ProcessInfo.processInfo.arguments.contains("--review-offline-transfer") {
+                                    ToolbarItem(placement: .topBarTrailing) {
+                                        Button("Download fixture") { preview.offlineLibrary.enqueue(OfflinePreviewFixture.video) }
+                                    }
+                                }
+                            }
+                    } else if reviewScreen == "login" {
                         LoginScreen { LoginViewModel(authRepository: preview.repository, router: preview.router) }
                     } else if reviewScreen == "search" {
                         SearchScreen(make: preview.makeSearchViewModel)
@@ -30,6 +40,7 @@ struct UIReviewPreviewApp: App {
                             SearchScreen(make: preview.makeSearchViewModel)
                         case .channelDetail(let channelId):
                             ChannelDetailScreen { preview.makeChannelDetailViewModel(channelId: channelId) }
+                        case .offlineDownloads: OfflineDownloadsView()
                         case .downloadQueue:
                             DownloadQueueScreen(make: preview.makeDownloadQueueViewModel)
                         case .playlistList:
@@ -45,13 +56,16 @@ struct UIReviewPreviewApp: App {
             }
             .environment(preview.authState)
             .environment(preview.router)
+            .environment(preview.offlineLibrary)
+            .onChange(of: preview.authState.authorization?.id) { preview.offlineLibrary.authorizationChanged() }
+            .onChange(of: scenePhase) { _, phase in if phase == .background { preview.offlineLibrary.pauseAll() } }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 HStack(spacing: 6) {
                     Image(systemName: "eye")
                     Text("UI REVIEW PREVIEW")
                         .fontWeight(.bold)
                     Spacer(minLength: 8)
-                    Text("Synthetic · playback off")
+                    Text(reviewScreen == "offline" ? "Local fixtures" : "Synthetic · playback off")
                         .lineLimit(1)
                     Menu {
                         Button("System") { previewColorScheme = nil }
@@ -70,7 +84,9 @@ struct UIReviewPreviewApp: App {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.bar)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("UI review preview. Synthetic fixtures. Playback is unavailable.")
+                .accessibilityLabel(reviewScreen == "offline"
+                    ? "UI review preview. Synthetic local video fixtures."
+                    : "UI review preview. Synthetic fixtures. Playback is unavailable.")
             }
             .preferredColorScheme(previewColorScheme)
             .tint(.accentColor)
@@ -82,12 +98,14 @@ struct UIReviewPreviewApp: App {
 @Observable
 final class UIReviewPreviewContext {
     let authState: AuthState
+    let offlineLibrary: OfflineLibrary
     let router: AppRouter
     let repository: UIReviewPreviewRepository
     let sponsorBlockSettings: SponsorBlockSettings
 
     init() {
-        authState = AuthState(keychainService: KeychainService(), loadPersistedCredentials: false)
+        authState = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
+        offlineLibrary = OfflinePreviewFixture.makeLibrary(authState: authState)
         router = AppRouter(authState: authState)
         repository = UIReviewPreviewRepository()
         sponsorBlockSettings = SponsorBlockSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)

@@ -6,6 +6,7 @@ enum Route: Hashable {
     case search
     case channelDetail(channelId: String)
     case downloadQueue
+    case offlineDownloads
     case playlistList
     case playlistDetail(playlistId: String)
     case settings

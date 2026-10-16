@@ -20,7 +20,10 @@ struct TAClientApp: App {
                 .environment(container)
                 .environment(container.router)
                 .environment(container.authState)
+                .environment(container.offlineLibrary)
+                .onChange(of: container.authState.authorization?.id) { container.offlineLibrary.authorizationChanged() }
                 .onChange(of: scenePhase) { _, phase in
+                    if phase == .background { container.offlineLibrary.pauseAll() }
                     if phase == .active {
                         forceLayoutUpdate()
                     }
@@ -48,58 +51,65 @@ struct RootView: View {
 
         switch router.appState {
         case .splash:
-            NavigationStack {
-                SplashView()
-                    .navigationTitle("Tube Archivist")
-                    .navigationBarTitleDisplayMode(.inline)
+            NavigationStack(path: $router.path) {
+                VStack {
+                    SplashView()
+                    NavigationLink(value: Route.offlineDownloads) {
+                        Label(String(localized: "offline_title"), systemImage: "arrow.down.circle")
+                    }
+                    .accessibilityLabel(String(localized: "offline_title"))
+                }
+                .navigationTitle("Tube Archivist")
+                .navigationBarTitleDisplayMode(.inline)
+                .navigationDestination(for: Route.self) { destination(for: $0) }
             }
-            .task {
+            .task(id: router.path.isEmpty) {
+                guard router.path.isEmpty else { return }
                 await autoLogin()
             }
         case .login:
-            NavigationStack {
+            NavigationStack(path: $router.path) {
                 LoginScreen { container.makeLoginViewModel() }
+                    .navigationDestination(for: Route.self) { destination(for: $0) }
             }
         case .authenticated:
             NavigationStack(path: $router.path) {
                 VideoListScreen { container.makeVideoListViewModel() }
-                    .navigationDestination(for: Route.self) { route in
-                        switch route {
-                        case .videoList:
-                            VideoListScreen { container.makeVideoListViewModel() }
-                        case .videoDetail(let videoId):
-                            VideoDetailScreen { container.makeVideoDetailViewModel(videoId: videoId) }
-                        case .search:
-                            SearchScreen { container.makeSearchViewModel() }
-                        case .channelDetail(let channelId):
-                            ChannelDetailScreen { container.makeChannelDetailViewModel(channelId: channelId) }
-                        case .downloadQueue:
-                            DownloadQueueScreen { container.makeDownloadQueueViewModel() }
-                        case .playlistList:
-                            PlaylistListScreen { container.makePlaylistListViewModel() }
-                        case .playlistDetail(let playlistId):
-                            PlaylistDetailScreen { container.makePlaylistDetailViewModel(playlistId: playlistId) }
-                        case .settings:
-                            SettingsScreen { container.makeSettingsViewModel() }
-                        case .about:
-                            AboutView()
-                        }
-                    }
+                    .navigationDestination(for: Route.self) { destination(for: $0) }
             }
+        }
+    }
+
+    @ViewBuilder private func destination(for route: Route) -> some View {
+        switch route {
+        case .videoList: VideoListScreen { container.makeVideoListViewModel() }
+        case .videoDetail(let id): VideoDetailScreen { container.makeVideoDetailViewModel(videoId: id) }
+        case .search: SearchScreen { container.makeSearchViewModel() }
+        case .channelDetail(let id): ChannelDetailScreen { container.makeChannelDetailViewModel(channelId: id) }
+        case .downloadQueue: DownloadQueueScreen { container.makeDownloadQueueViewModel() }
+        case .offlineDownloads: OfflineDownloadsView()
+        case .playlistList: PlaylistListScreen { container.makePlaylistListViewModel() }
+        case .playlistDetail(let id): PlaylistDetailScreen { container.makePlaylistDetailViewModel(playlistId: id) }
+        case .settings: SettingsScreen { container.makeSettingsViewModel() }
+        case .about: AboutView()
         }
     }
 
     private func autoLogin() async {
         do {
             let isValid = try await container.authRepository.ping()
+            guard !Task.isCancelled, router.path.isEmpty else { return }
             if isValid {
                 try? await container.authRepository.fetchUserAccount()
+                guard !Task.isCancelled, router.path.isEmpty else { return }
                 router.onLoginSuccess()
             } else {
                 router.onAutoLoginFailed()
             }
         } catch {
-            router.onAutoLoginFailed()
+            guard !Task.isCancelled, router.path.isEmpty else { return }
+            if let error = error as? AppError, case .unauthorized = error { router.onAutoLoginFailed() }
+            else { router.onAutoLoginUnavailable() }
         }
     }
 }

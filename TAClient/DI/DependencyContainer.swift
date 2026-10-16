@@ -7,6 +7,7 @@ final class DependencyContainer {
     // Local
     let keychainService: KeychainService
     let authState: AuthState
+    let offlineLibrary: OfflineLibrary
 
     // Network
     let apiClient: APIClient
@@ -44,13 +45,14 @@ final class DependencyContainer {
 
         sponsorBlockSettings = SponsorBlockSettings()
         router = AppRouter(authState: authState)
+        offlineLibrary = OfflineLibrary(authState: authState)
     }
 
     // MARK: - ViewModel Factories
 
     func makeLoginViewModel() -> LoginViewModel {
         let model = LoginViewModel(authRepository: authRepository, router: router)
-        model.serverURL = authState.reloginURL ?? ""
+        model.serverURL = authState.reloginURL ?? authState.serverURL ?? ""
         return model
     }
 
