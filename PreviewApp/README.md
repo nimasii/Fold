@@ -15,3 +15,7 @@ Pass `--review-screen=login` or `--review-screen=search` to open the production 
 `TAClientUITests/ModernInterfaceUITests` launches this companion app to verify enabled/disabled connection actions, the existing-token disclosure, search results/clearing/empty states, both appearances, and the largest accessibility text size. Build and install `UIReviewPreview` on the same simulator before running these tests through the `ConnectionFlow` scheme. All archive data is synthetic and remote artwork is replaced by placeholders.
 
 Reviewed sign-in and search captures are in `docs/screenshots/connection-search/`. The screenshots show real production SwiftUI views in this isolated preview target.
+
+## Downloads selector review
+
+Pass `--review-screen=downloads` (plus `--review-dark` for dark appearance) to open Downloads through the normal pushed navigation route. This mode uses a privileged synthetic user and includes an ignored fixture entry, so the Rescan button and both filter states can be reviewed without accessing a server. `DownloadSelectorUITests` verifies Pending → Ignored → Pending, the matching rows and the native selected accessibility state in both appearances.
