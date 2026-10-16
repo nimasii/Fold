@@ -7,13 +7,14 @@ enum OfflinePreviewFixture {
         let unauthorized = ProcessInfo.processInfo.arguments.contains("--review-offline-auth-fail")
         let argsRedirect = ProcessInfo.processInfo.arguments.contains("--review-offline-redirect")
         let slow = ProcessInfo.processInfo.arguments.contains("--review-offline-slow")
+        let artworkRedirect = ProcessInfo.processInfo.arguments.contains("--review-offline-artwork-redirect")
         let path = unauthorized ? "unauthorized.mp4" : argsRedirect ? "redirect.mp4" : slow ? "slow.mp4" : "video.mp4"
         return Video(youtubeId: unauthorized ? "offline-auth-fixture" : "offline-fixture", title: "A Moment Offline",
-                     description: nil, published: "", publishedShort: "", downloaded: "", downloadedShort: "",
-                     channelName: "Fixture Studio", channelId: "fixture-studio", channelThumbUrl: nil,
-                     thumbUrl: "preview://offline", mediaUrl: "http://127.0.0.1:18081/" + path,
+                     description: "A generated local clip, saved privately for offline playback.", published: "October 8, 2026", publishedShort: "Oct 8", downloaded: "October 16, 2026", downloadedShort: "Oct 16",
+                     channelName: "Fixture Studio", channelId: "fixture-studio", channelThumbUrl: "http://127.0.0.1:18081/channel.png",
+                     thumbUrl: "http://127.0.0.1:18081/" + (artworkRedirect ? "redirect-artwork.png" : "thumbnail.png"), mediaUrl: "http://127.0.0.1:18081/" + path,
                      duration: 2, durationStr: "0:02", watched: false, progress: 0, position: 0,
-                     viewCount: 0, likeCount: 0, mediaSize: 0, vidType: "videos", category: [], tags: [],
+                     viewCount: 1248, likeCount: 96, mediaSize: 0, vidType: "videos", category: [], tags: [],
                      streams: [StreamInfo(type: "video", codec: "h264", bitrate: 0, width: 320, height: 180)],
                      sponsorblock: [], playlists: [])
     }
@@ -41,6 +42,12 @@ enum OfflinePreviewFixture {
                                                    headerFields: ["Content-Type": "video/mp4", "Content-Length": String(size)])!
                     let (kind, bytes) = try store.commit(store.stage(temporary), record: record, response: response)
                     record.kind = kind; record.bytes = bytes; record.status = .ready
+                    if args.contains("--review-offline-legacy") { record.metadata = nil }
+                    for (kind, resource) in args.contains("--review-offline-legacy") ? [] : [(OfflineArtworkKind.thumbnail, "offline-thumbnail"), (.channel, "offline-channel")] {
+                        if let image = Bundle.main.url(forResource: resource, withExtension: "png") ?? Bundle.main.url(forResource: resource, withExtension: "png", subdirectory: "Fixtures") {
+                            try store.saveArtwork(Data(contentsOf: image), id: record.id, kind: kind)
+                        }
+                    }
                     try store.save([record])
                 }
             } catch { /* The library surfaces storage errors; fixtures never fall back to an owner server. */ }

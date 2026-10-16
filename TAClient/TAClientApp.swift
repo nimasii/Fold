@@ -87,7 +87,7 @@ struct RootView: View {
         case .search: SearchScreen { container.makeSearchViewModel() }
         case .channelDetail(let id): ChannelDetailScreen { container.makeChannelDetailViewModel(channelId: id) }
         case .downloadQueue: DownloadQueueScreen { container.makeDownloadQueueViewModel() }
-        case .offlineDownloads: OfflineDownloadsView()
+        case .offlineDownloads: OfflineDownloadsView(videoRepository: container.videoRepository)
         case .playlistList: PlaylistListScreen { container.makePlaylistListViewModel() }
         case .playlistDetail(let id): PlaylistDetailScreen { container.makePlaylistDetailViewModel(playlistId: id) }
         case .settings: SettingsScreen { container.makeSettingsViewModel() }

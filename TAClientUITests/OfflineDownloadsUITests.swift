@@ -7,25 +7,31 @@ final class OfflineDownloadsUITests: XCTestCase {
         try await mode(offline: false)
         let app = launch(["--review-offline-reset", "--review-offline-transfer"])
         app.buttons["Download fixture"].tap()
-        XCTAssertTrue(app.buttons["A Moment Offline"].waitForExistence(timeout: 15))
+        XCTAssertTrue(card(app).waitForExistence(timeout: 15))
         capture(app, "offline-downloaded")
         app.terminate()
         try await mode(offline: true)
         let countsBefore = try await counts()
         app.launchArguments = ["--review-screen=offline"] // Signed out; no server auth or seed.
         app.launch()
-        XCTAssertTrue(app.buttons["A Moment Offline"].waitForExistence(timeout: 10))
-        app.buttons["A Moment Offline"].tap()
-        let time = app.staticTexts["offline.playback.time"]
-        XCTAssertTrue(time.waitForExistence(timeout: 10))
-        let advanced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", "0:00"), object: time)
-        let playbackResult = await XCTWaiter.fulfillment(of: [advanced], timeout: 10)
-        XCTAssertEqual(playbackResult, .completed)
+        XCTAssertTrue(card(app).waitForExistence(timeout: 10))
+        card(app).tap()
+        XCTAssertTrue(app.otherElements["video.player.surface"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Pin player"].waitForExistence(timeout: 5))
+        showNativeControls(app)
+        let playPause = app.buttons["Play/Pause"]
+        if playPause.label != "Pause" { playPause.tap() }
+        let elapsed = app.staticTexts["Elapsed Time"]
+        XCTAssertTrue(elapsed.waitForExistence(timeout: 5))
+        let advanced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "NOT label BEGINSWITH %@", "0:00"), object: elapsed)
+        let result = await XCTWaiter.fulfillment(of: [advanced], timeout: 5)
+        XCTAssertEqual(result, .completed)
         capture(app, "offline-playback-server-unavailable")
         let countsAfter = try await counts()
         XCTAssertEqual(countsBefore["mediaRequests"], countsAfter["mediaRequests"])
-        app.buttons["Done"].tap()
-        app.buttons["A Moment Offline"].press(forDuration: 1)
+        XCTAssertEqual(countsBefore["artworkRequests"], countsAfter["artworkRequests"])
+        app.navigationBars.buttons["Downloads"].tap()
+        card(app).press(forDuration: 1)
         app.buttons["Remove Local Copy"].tap()
         app.buttons.matching(identifier: "Remove Local Copy").allElementsBoundByIndex.last!.tap()
         XCTAssertTrue(app.staticTexts["No Downloads Yet"].waitForExistence(timeout: 5))
@@ -39,10 +45,54 @@ final class OfflineDownloadsUITests: XCTestCase {
         continueAfterFailure = false
         for dark in [false, true] {
             let app = launch(["--review-offline-reset", "--review-offline-seed"] + (dark ? ["--review-dark"] : []))
-            XCTAssertTrue(app.buttons["A Moment Offline"].waitForExistence(timeout: 10))
+            XCTAssertTrue(card(app).waitForExistence(timeout: 10))
             capture(app, "offline-library-\(dark ? "dark" : "light")")
+            card(app).tap()
+            XCTAssertTrue(app.otherElements["video.player.surface"].waitForExistence(timeout: 10))
+            showNativeControls(app)
+            capture(app, "offline-shared-player-\(dark ? "dark" : "light")")
+            let tree = XCTAttachment(string: app.debugDescription); tree.name = "shared-player-controls-\(dark)"; tree.lifetime = .keepAlways; add(tree)
             app.terminate()
         }
+    }
+
+    @MainActor func testLegacyCopyRefreshesPresentationWithoutRedownloadingMedia() async throws {
+        continueAfterFailure = false
+        try await mode(offline: false)
+        let before = try await counts()
+        let app = launch(["--review-offline-reset", "--review-offline-seed", "--review-offline-legacy", "--review-offline-transfer"])
+        XCTAssertTrue(card(app).waitForExistence(timeout: 10))
+        card(app).press(forDuration: 1)
+        app.buttons["Refresh details & artwork"].tap()
+        let deadline = Date().addingTimeInterval(10)
+        var after = try await counts()
+        while (after["artworkRequests"] ?? 0) < (before["artworkRequests"] ?? 0) + 2 && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(100)); after = try await counts()
+        }
+        XCTAssertEqual(after["mediaRequests"], before["mediaRequests"])
+        XCTAssertGreaterThanOrEqual(after["artworkRequests"] ?? 0, (before["artworkRequests"] ?? 0) + 2)
+        XCTAssertTrue(card(app).exists)
+        capture(app, "offline-legacy-presentation-refreshed")
+        app.terminate()
+    }
+
+    @MainActor func testArtworkRedirectCannotLeakAuthenticationOrInvalidateVideo() async throws {
+        continueAfterFailure = false
+        try await mode(offline: false)
+        let before = try await counts()
+        let app = launch(["--review-offline-reset", "--review-offline-transfer", "--review-offline-artwork-redirect"])
+        app.buttons["Download fixture"].tap()
+        XCTAssertTrue(card(app).waitForExistence(timeout: 15))
+        let deadline = Date().addingTimeInterval(10)
+        var after = try await counts()
+        while (after["artworkRequests"] ?? 0) < (before["artworkRequests"] ?? 0) + 2 && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(100)); after = try await counts()
+        }
+        XCTAssertEqual(after["leakRequests"], 0)
+        XCTAssertGreaterThanOrEqual(after["artworkRequests"] ?? 0, (before["artworkRequests"] ?? 0) + 2)
+        card(app).tap()
+        XCTAssertTrue(app.otherElements["video.player.surface"].waitForExistence(timeout: 10))
+        app.terminate()
     }
 
     @MainActor func testCancelRetryAndInterruptedRestart() async throws {
@@ -61,10 +111,10 @@ final class OfflineDownloadsUITests: XCTestCase {
         app.launchArguments = ["--review-screen=offline"] + args
         app.launch()
         XCTAssertTrue(app.staticTexts["Interrupted · retry from start"].waitForExistence(timeout: 10))
-        XCTAssertFalse(app.buttons["A Moment Offline"].exists)
+        XCTAssertFalse(card(app).exists)
         capture(app, "offline-transfer-interrupted")
         app.buttons["Retry"].tap()
-        XCTAssertTrue(app.buttons["A Moment Offline"].waitForExistence(timeout: 20))
+        XCTAssertTrue(card(app).waitForExistence(timeout: 20))
         app.terminate()
     }
 
@@ -75,7 +125,7 @@ final class OfflineDownloadsUITests: XCTestCase {
             let app = launch(["--review-offline-reset", "--review-offline-transfer", flag])
             app.buttons["Download fixture"].tap()
             XCTAssertTrue(app.staticTexts["Sign in to retry"].waitForExistence(timeout: 10))
-            XCTAssertFalse(app.buttons["A Moment Offline"].exists)
+            XCTAssertFalse(card(app).exists)
             capture(app, "offline-\(flag.hasSuffix("redirect") ? "redirect-blocked" : "sign-in-required")")
             app.terminate()
         }
@@ -83,6 +133,17 @@ final class OfflineDownloadsUITests: XCTestCase {
         XCTAssertEqual(redirectCounts["leakRequests"], 0)
     }
 
+    @MainActor private func card(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "A Moment Offline,")).firstMatch
+    }
+    @MainActor private func showNativeControls(_ app: XCUIApplication) {
+        if !app.buttons["Play/Pause"].isHittable {
+            app.otherElements["video.player.surface"].coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.5)).tap()
+        }
+        XCTAssertTrue(app.buttons["Play/Pause"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["Fullscreen Button"].exists)
+        XCTAssertTrue(app.sliders["Current position"].exists)
+    }
     @MainActor private func launch(_ args: [String]) -> XCUIApplication {
         let app = XCUIApplication(bundleIdentifier: "ru.mzhukov.TAClient.UIReviewPreview")
         app.launchArguments = ["--review-screen=offline"] + args

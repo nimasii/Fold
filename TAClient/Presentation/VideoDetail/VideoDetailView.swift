@@ -104,20 +104,10 @@ struct VideoDetailView: View {
 
     @ViewBuilder
     private func videoContent(_ video: Video) -> some View {
-        if viewModel.isPinned {
-            VStack(spacing: 0) {
-                playerArea(video)
-                ScrollView {
-                    videoDetails(video)
-                }
-            }
-        } else {
-            ScrollView {
-                VStack(spacing: 0) {
-                    playerArea(video)
-                    videoDetails(video)
-                }
-            }
+        VideoDetailLayout(isPinned: viewModel.isPinned) {
+            playerArea(video)
+        } details: {
+            videoDetails(video)
         }
     }
 
@@ -143,117 +133,21 @@ struct VideoDetailView: View {
         }
         .aspectRatio(16.0 / 9.0, contentMode: .fit)
 #else
-        if let player = viewModel.player {
-            ZStack {
-                AVPlayerView(
-                    player: player,
-                    isFullScreen: $viewModel.isFullScreen,
-                    isPiPActive: $viewModel.isPiPActive,
-                    onPiPStopped: { viewModel.handlePiPStopped() }
-                )
-                if viewModel.isBuffering {
-                    Color.black
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(.white)
-                }
-                sponsorBlockBanner
-            }
-            .aspectRatio(16.0 / 9.0, contentMode: .fill)
-            .frame(maxWidth: .infinity)
-            .clipped()
-        } else if let vlcURL = viewModel.vlcMediaURL {
-            ZStack {
-                VLCPlayerView(
-                    mediaURL: vlcURL,
-                    startPosition: viewModel.startPosition,
-                    duration: Double(video.duration),
-                    onTimeChanged: { seconds in viewModel.onVLCTimeChanged(seconds: seconds) },
-                    isFullScreen: $viewModel.isFullScreen,
-                    sponsorBlockSeekTarget: viewModel.vlcSponsorBlockSeekTarget,
-                    seekDelta: viewModel.vlcSeekDelta,
-                    onSeekDeltaConsumed: { viewModel.clearVLCSeekDelta() },
-                    onDoubleTap: viewModel.doubleTapToSeek ? { forward in
-                        viewModel.seekByInterval(forward: forward)
-                    } : nil
-                )
-                if viewModel.isBuffering {
-                    Color.black
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(.white)
-                }
-                PlayerSeekFeedbackOverlay(
-                    seekInterval: viewModel.seekInterval,
-                    feedback: viewModel.seekFeedback
-                )
-                sponsorBlockBanner
-            }
-            .aspectRatio(16.0 / 9.0, contentMode: .fill)
-            .frame(maxWidth: .infinity)
-            .clipped()
-        } else {
-            ZStack {
-                AuthenticatedAsyncImage(url: video.thumbUrl)
-                    .aspectRatio(16.0 / 9.0, contentMode: .fill)
-                    .frame(maxWidth: .infinity)
-                    .clipped()
-
-                if viewModel.isBuffering {
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(.white)
-                } else {
-                    Button {
-                        viewModel.startPlayback()
-                    } label: {
-                        Circle()
-                            .fill(.black.opacity(0.6))
-                            .frame(width: 72, height: 72)
-                            .overlay {
-                                Image(systemName: "play.fill")
-                                    .font(.title)
-                                    .foregroundStyle(.white)
-                            }
-                    }
-                    .accessibilityLabel(String(localized: "video_detail_play"))
-                }
-
-                if let playbackError = viewModel.playbackError {
-                    VStack {
-                        HStack(spacing: 8) {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .font(.caption)
-                            Text(playbackError)
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .lineLimit(3)
-                            Spacer()
-                            Button {
-                                viewModel.playbackError = nil
-                                viewModel.startPlayback()
-                            } label: {
-                                Text(String(localized: "retry"))
-                                    .font(.caption)
-                                    .fontWeight(.bold)
-                            }
-                            .accessibilityLabel(String(localized: "retry"))
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(.ultraThinMaterial)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .padding(.horizontal, 8)
-                        .padding(.top, 8)
-
-                        Spacer()
-                    }
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.3), value: viewModel.playbackError)
-                }
-            }
-            .aspectRatio(16.0 / 9.0, contentMode: .fit)
-        }
+        VideoPlayerSurface(
+            video: video, player: viewModel.player, vlcURL: viewModel.vlcMediaURL,
+            isFullScreen: $viewModel.isFullScreen, isPiPActive: $viewModel.isPiPActive,
+            isBuffering: viewModel.isBuffering, startPosition: viewModel.startPosition,
+            playbackError: viewModel.playbackError, seekInterval: viewModel.seekInterval,
+            seekFeedback: viewModel.seekFeedback, vlcSponsorBlockSeekTarget: viewModel.vlcSponsorBlockSeekTarget,
+            vlcSeekDelta: viewModel.vlcSeekDelta,
+            onTimeChanged: { viewModel.onVLCTimeChanged(seconds: $0) },
+            onClearVLCSeekDelta: { viewModel.clearVLCSeekDelta() },
+            onDoubleTap: viewModel.doubleTapToSeek ? { viewModel.seekByInterval(forward: $0) } : nil,
+            onPiPStopped: { viewModel.handlePiPStopped() },
+            onPlay: { viewModel.startPlayback() },
+            onRetry: { viewModel.playbackError = nil; viewModel.startPlayback() },
+            overlay: sponsorBlockBanner
+        )
 #endif
     }
 

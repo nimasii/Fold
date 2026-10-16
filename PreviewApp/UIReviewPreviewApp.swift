@@ -14,7 +14,7 @@ struct UIReviewPreviewApp: App {
             NavigationStack(path: $router.path) {
                 Group {
                     if reviewScreen == "offline" {
-                        OfflineDownloadsView()
+                        OfflineDownloadsView(videoRepository: preview.repository)
                             .toolbar {
                                 if ProcessInfo.processInfo.arguments.contains("--review-offline-transfer") {
                                     ToolbarItem(placement: .topBarTrailing) {
@@ -40,7 +40,7 @@ struct UIReviewPreviewApp: App {
                             SearchScreen(make: preview.makeSearchViewModel)
                         case .channelDetail(let channelId):
                             ChannelDetailScreen { preview.makeChannelDetailViewModel(channelId: channelId) }
-                        case .offlineDownloads: OfflineDownloadsView()
+                        case .offlineDownloads: OfflineDownloadsView(videoRepository: preview.repository)
                         case .downloadQueue:
                             DownloadQueueScreen(make: preview.makeDownloadQueueViewModel)
                         case .playlistList:

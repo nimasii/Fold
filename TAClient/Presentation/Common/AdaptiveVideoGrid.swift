@@ -17,6 +17,11 @@ struct AdaptiveVideoGrid: View {
     var onChannelTap: ((String) -> Void)? = nil
     var onToggleWatched: ((String) -> Void)? = nil
     var onNearEnd: (() -> Void)? = nil
+    var localArtwork: [String: LocalVideoArtwork] = [:]
+    var supplementaryText: [String: String] = [:]
+    var onRemoveLocalCopy: ((String) -> Void)? = nil
+    var onRefreshLocalDetails: ((String) -> Void)? = nil
+    var refreshableLocalIDs: Set<String> = []
 
     var isSelecting: Bool = false
     var selectedIds: Set<String> = []
@@ -28,7 +33,14 @@ struct AdaptiveVideoGrid: View {
     var body: some View {
         LazyVGrid(columns: columns, spacing: 16) {
             ForEach(videos) { video in
-                VideoCardView(video: video, onChannelTap: isSelecting ? nil : onChannelTap)
+                VideoCardView(video: video, onChannelTap: isSelecting ? nil : onChannelTap,
+                              localArtwork: localArtwork[video.id], supplementaryText: supplementaryText[video.id])
+                    .contentShape(Rectangle())
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction {
+                        if isSelecting { onToggleSelection?(video.youtubeId) }
+                        else { onVideoTap(video.youtubeId) }
+                    }
                     .overlay {
                         if isSelecting {
                             ZStack(alignment: .topLeading) {
@@ -57,6 +69,18 @@ struct AdaptiveVideoGrid: View {
                     }
                     .if(onEnterSelection == nil) { view in
                         view.contextMenu {
+                            if let onRemoveLocalCopy {
+                                Button(role: .destructive) { onRemoveLocalCopy(video.id) } label: {
+                                    Label(String(localized: "offline_remove"), systemImage: "trash")
+                                }
+                                .accessibilityLabel(String(localized: "offline_remove"))
+                            }
+                            if let onRefreshLocalDetails, refreshableLocalIDs.contains(video.id) {
+                                Button { onRefreshLocalDetails(video.id) } label: {
+                                    Label(String(localized: "offline_refresh_details"), systemImage: "arrow.clockwise")
+                                }
+                                .accessibilityLabel(String(localized: "offline_refresh_details"))
+                            }
                             if let onToggleWatched {
                                 Button {
                                     onToggleWatched(video.youtubeId)

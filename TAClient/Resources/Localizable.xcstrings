@@ -3352,6 +3352,70 @@
           }
         }
       }
+    },
+    "offline_refresh_details": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refresh details & artwork"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить сведения и обложку"
+          }
+        }
+      }
+    },
+    "offline_refreshing_details": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Refreshing details…"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновление сведений…"
+          }
+        }
+      }
+    },
+    "offline_info": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About Downloads"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "О загрузках"
+          }
+        }
+      }
+    },
+    "offline_legacy_artwork_help": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Older downloads keep playing. While connected to their server, touch and hold a video and choose Refresh details & artwork."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Старые загрузки продолжают работать. Подключившись к их серверу, нажмите и удерживайте видео и выберите «Обновить сведения и обложку»."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

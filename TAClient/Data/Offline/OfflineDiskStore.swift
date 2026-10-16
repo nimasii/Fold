@@ -1,4 +1,8 @@
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
+
+nonisolated enum OfflineArtworkKind: String, CaseIterable { case thumbnail, channel }
 
 /// Owns only its private directory. File paths use UUIDs and a closed extension enum.
 nonisolated final class OfflineDiskStore: @unchecked Sendable {
@@ -7,10 +11,11 @@ nonisolated final class OfflineDiskStore: @unchecked Sendable {
     private var manifest: URL { root.appendingPathComponent("library.json") }
     private var media: URL { root.appendingPathComponent("Media", isDirectory: true) }
     private var staging: URL { root.appendingPathComponent("Staging", isDirectory: true) }
+    private var artwork: URL { root.appendingPathComponent("Artwork", isDirectory: true) }
 
     init(root: URL, files: FileManager = .default) throws {
         self.root = root; self.files = files
-        for url in [root, media, staging] {
+        for url in [root, media, staging, artwork] {
             try files.createDirectory(at: url, withIntermediateDirectories: true)
             try protect(url)
         }
@@ -72,13 +77,44 @@ nonisolated final class OfflineDiskStore: @unchecked Sendable {
     }
     func discard(_ staged: URL) { try? files.removeItem(at: staged) }
     func remove(_ record: OfflineRecord) throws {
-        guard let url = file(for: record), files.fileExists(atPath: url.path) else { return }
-        try files.removeItem(at: url)
+        if let url = file(for: record), files.fileExists(atPath: url.path) { try files.removeItem(at: url) }
+        for kind in OfflineArtworkKind.allCases {
+            let url = artworkFile(record.id, kind: kind)
+            if files.fileExists(atPath: url.path) { try files.removeItem(at: url) }
+        }
+    }
+    private func artworkFile(_ id: UUID, kind: OfflineArtworkKind) -> URL {
+        artwork.appendingPathComponent(id.uuidString + "-" + kind.rawValue + ".jpg")
+    }
+    func artworkURL(_ id: UUID, kind: OfflineArtworkKind) -> URL? {
+        let url = artworkFile(id, kind: kind)
+        return files.fileExists(atPath: url.path) ? url : nil
+    }
+    func saveArtwork(_ data: Data, id: UUID, kind: OfflineArtworkKind) throws {
+        guard data.count <= 4 * 1024 * 1024,
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: kind == .thumbnail ? 1024 : 160,
+                kCGImageSourceCreateThumbnailWithTransform: true
+              ] as CFDictionary) else { throw OfflineFailure.invalidMedia }
+        // Re-encode only pixels, without remote metadata or EXIF fields.
+        let jpeg = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(jpeg, UTType.jpeg.identifier as CFString, 1, nil) else { throw OfflineFailure.storage }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { throw OfflineFailure.storage }
+        let target = artworkFile(id, kind: kind)
+        try (jpeg as Data).write(to: target, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        try protect(target)
     }
     func cleanOrphans(keeping records: [OfflineRecord]) throws {
         let keep = Set(records.filter { $0.status == .ready }.compactMap { file(for: $0)?.lastPathComponent })
         for url in try files.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil) { try files.removeItem(at: url) }
         for url in try files.contentsOfDirectory(at: media, includingPropertiesForKeys: nil) where !keep.contains(url.lastPathComponent) {
+            try files.removeItem(at: url)
+        }
+        let artworkKeep = Set(records.flatMap { record in OfflineArtworkKind.allCases.map { artworkFile(record.id, kind: $0).lastPathComponent } })
+        for url in try files.contentsOfDirectory(at: artwork, includingPropertiesForKeys: nil) where !artworkKeep.contains(url.lastPathComponent) {
             try files.removeItem(at: url)
         }
     }

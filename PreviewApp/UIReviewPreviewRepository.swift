@@ -71,7 +71,8 @@ final class UIReviewPreviewRepository: VideoRepositoryProtocol, AuthRepositoryPr
     }
 
     func getVideo(id: String) async throws -> Video {
-        videos.first(where: { $0.youtubeId == id }) ?? videos[0]
+        if id == "offline-fixture" { return OfflinePreviewFixture.video }
+        return videos.first(where: { $0.youtubeId == id }) ?? videos[0]
     }
 
     func updateProgress(videoId: String, position: Double) async throws {}
