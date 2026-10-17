@@ -33,7 +33,9 @@ struct TAClientApp: App {
 
     @ViewBuilder private var appContent: some View {
         #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--playback-fixture") {
+        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture") {
+            StreamingFixtureRoot()
+        } else if ProcessInfo.processInfo.arguments.contains("--playback-fixture") {
             PlaybackParityFixtureView()
         } else { RootView() }
         #else
@@ -83,10 +85,7 @@ struct RootView: View {
                     .navigationDestination(for: Route.self) { destination(for: $0) }
             }
         case .authenticated:
-            NavigationStack(path: $router.path) {
-                VideoListScreen { container.makeVideoListViewModel() }
-                    .navigationDestination(for: Route.self) { destination(for: $0) }
-            }
+            StreamingTabs { destination(for: $0) }
         }
     }
 

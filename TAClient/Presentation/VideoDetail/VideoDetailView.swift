@@ -21,6 +21,7 @@ struct VideoDetailView: View {
             }
         }
         .geometryGroup()
+        .background(StreamingStyle.background)
         .navigationTitle(viewModel.video?.title ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -174,12 +175,12 @@ struct VideoDetailView: View {
 
     @ViewBuilder
     private func videoDetails(_ video: Video) -> some View {
-        VStack(spacing: 16) {
-            if !viewModel.isLocalPlayback { OfflineDownloadButton(video: video) }
+        VStack(alignment: .leading, spacing: 24) {
             VideoInfoSection(video: video,
                 onChannelTap: viewModel.isLocalPlayback ? nil : { viewModel.navigateToChannel($0) },
                 localArtwork: viewModel.localPlayback?.artwork,
                 showsStatistics: !viewModel.isLocalPlayback || viewModel.localPlayback?.record.metadata != nil)
+            if !viewModel.isLocalPlayback { OfflineDownloadButton(video: video) }
 
             if viewModel.isLocalPlayback {
                 Label(String(localized: "offline_playing_local"), systemImage: "internaldrive")

@@ -19,7 +19,7 @@ struct SearchView: View {
             }
             results
         }
-        .background(Color(.systemGroupedBackground))
+        .background(StreamingStyle.background)
         .searchable(text: $viewModel.query,
                     placement: .navigationBarDrawer(displayMode: .always),
                     prompt: Text(String(localized: "search_archive_prompt")))
@@ -40,11 +40,14 @@ struct SearchView: View {
         } else if viewModel.hasSearched && viewModel.videos.isEmpty {
             ContentUnavailableView.search(text: viewModel.query)
         } else if viewModel.videos.isEmpty {
-            ContentUnavailableView {
-                Label(String(localized: "search_archive_prompt"), systemImage: "magnifyingglass")
-            } description: {
-                Text(String(localized: "search_archive_description"))
+            VStack(alignment: .leading, spacing: 20) {
+                Image(systemName: "magnifyingglass").font(.largeTitle).foregroundStyle(.tint).accessibilityHidden(true)
+                Text(String(localized: "stream_search_intro")).font(.largeTitle.bold())
+                Text(String(localized: "stream_search_help")).font(.body).foregroundStyle(.secondary)
+                Spacer()
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(StreamingStyle.gutter).padding(.top, 24)
         } else {
             ScrollView {
                 AdaptiveVideoGrid(

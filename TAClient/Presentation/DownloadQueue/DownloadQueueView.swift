@@ -2,9 +2,12 @@ import SwiftUI
 
 struct DownloadQueueView: View {
     @State var viewModel: DownloadQueueViewModel
+    @State private var pendingDeletion: DownloadItem?
     @Environment(AuthState.self) private var authState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let nearEnd = Set(viewModel.items.suffix(5).map(\.id))
         VStack(spacing: 0) {
             if viewModel.isLoading && viewModel.items.isEmpty {
                 LoadingView()
@@ -22,14 +25,13 @@ struct DownloadQueueView: View {
                     ForEach(viewModel.items, id: \.id) { item in
                         DownloadItemRow(item: item)
                             .onAppear {
-                                if let index = viewModel.items.firstIndex(where: { $0.id == item.id }),
-                                   index >= viewModel.items.count - 5 {
+                                if nearEnd.contains(item.id) {
                                     Task { await viewModel.loadMoreIfNeeded() }
                                 }
                             }
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
-                                    Task { await viewModel.deleteItem(videoId: item.youtubeId) }
+                                    pendingDeletion = item
                                 } label: {
                                     Label(String(localized: "download_action_delete"), systemImage: "trash")
                                 }
@@ -66,7 +68,7 @@ struct DownloadQueueView: View {
                     }
                 }
                 .listStyle(.plain)
-                .animation(.default, value: viewModel.items)
+                .animation(reduceMotion ? nil : .default, value: viewModel.items)
                 .refreshable {
                     await viewModel.refresh()
                 }
@@ -79,10 +81,10 @@ struct DownloadQueueView: View {
         // reflows the List and throws the scroll to the top. Previously these lived inside a
         // `.geometryGroup()`'d VStack directly above the List; inserting/animating them
         // re-laid the whole subtree and reset the List's scroll during active downloads.
-        // The block stays fully absent (zero inset) when idle because it renders nothing when
-        // `downloadProgress` is empty and there is no inline error.
+        // The filter remains stable while progress and error content change below it.
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
+                filterPicker.padding(.horizontal, StreamingStyle.gutter).padding(.vertical, 8)
                 if !viewModel.downloadProgress.isEmpty {
                     VStack(spacing: 6) {
                         ForEach(viewModel.downloadProgress, id: \.id) { info in
@@ -114,11 +116,11 @@ struct DownloadQueueView: View {
                 }
             }
             // Opaque chrome background so scrolled List content doesn't show through the
-            // inset region. Zero-height (hence invisible) when both children are absent.
-            .background(.bar)
+            // inset region; the filter keeps its own stable height.
+            .background(StreamingStyle.background)
         }
         // Animate the banner/error inset appearing/disappearing on batch start/finish.
-        .animation(.default, value: viewModel.downloadProgress.isEmpty)
+        .animation(reduceMotion ? nil : .default, value: viewModel.downloadProgress.isEmpty)
         .safeAreaInset(edge: .top) {
             if authState.isPrivileged {
                 HStack(spacing: 8) {
@@ -155,11 +157,20 @@ struct DownloadQueueView: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
-                .background(.bar)
+                .background(StreamingStyle.background)
             }
         }
-        .navigationTitle(String(localized: "download_queue_title"))
-        .navigationBarTitleDisplayMode(.inline)
+        .confirmationDialog(String(localized: "download_action_delete"), isPresented: Binding(
+            get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }), titleVisibility: .visible) {
+            Button(String(localized: "download_action_delete"), role: .destructive) {
+                if let item = pendingDeletion { Task { await viewModel.deleteItem(videoId: item.youtubeId) } }
+                pendingDeletion = nil
+            }
+            Button(String(localized: "cancel"), role: .cancel) { pendingDeletion = nil }
+        } message: { if let item = pendingDeletion { Text(item.title) } }
+        .background(StreamingStyle.background)
+        .navigationTitle(String(localized: "stream_server_queue"))
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 if viewModel.downloadProgress.contains(where: { $0.canStop }) {
@@ -198,14 +209,7 @@ struct DownloadQueueView: View {
                     .accessibilityLabel(String(localized: "download_rescan_button"))
                 }
             }
-            if #available(iOS 26.0, *) {
-                ToolbarItem(placement: .topBarTrailing) { filterPicker }
-                    // The segmented control draws its own surface and selection pill.
-                    // Give it its own toolbar group without a second glass background.
-                    .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: .topBarTrailing) { filterPicker }
-            }
+
         }
         .task {
             if viewModel.items.isEmpty {
@@ -227,25 +231,26 @@ struct DownloadQueueView: View {
             Text(String(localized: "download_filter_ignore")).tag("ignore")
         }
         .pickerStyle(.segmented)
-        .fixedSize()
-        .accessibilityLabel(String(localized: "download_queue_title"))
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .accessibilityLabel(String(localized: "stream_server_queue"))
     }
 }
 
 private struct DownloadItemRow: View {
     let item: DownloadItem
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
         HStack(spacing: 12) {
             AuthenticatedAsyncImage(url: item.thumbUrl)
-                .frame(width: 120, height: 68)
+                .frame(width: typeSize.isAccessibilitySize ? 72 : 112, height: typeSize.isAccessibilitySize ? 72 : 64)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
                     .font(.subheadline)
                     .fontWeight(.medium)
-                    .lineLimit(2)
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
 
                 Text(item.channelName)
                     .font(.caption)

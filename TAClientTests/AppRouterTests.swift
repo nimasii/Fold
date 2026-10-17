@@ -75,4 +75,25 @@ struct AppRouterTests {
         #expect(router.appState == .authenticated)
         #expect(router.path.isEmpty)
     }
+    @Test @MainActor func tabNavigation_retainsIndependentPathsAndBackTargetsActiveTab() {
+        let auth = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
+        let router = AppRouter(authState: auth)
+        router.onLoginSuccess()
+        router.navigate(to: .videoDetail(videoId: "one"))
+        router.selectedTab = .library
+        #expect(router.path.isEmpty)
+        router.navigate(to: .playlistList)
+        router.navigate(to: .playlistDetail(playlistId: "list"))
+        router.goBack()
+        #expect(router.path.count == 1)
+        router.selectedTab = .watch
+        #expect(router.path.count == 1)
+        #expect(router.path(for: .search).isEmpty)
+        router.handleUnauthorized()
+        for tab in AppTab.allCases { #expect(router.path(for: tab).isEmpty) }
+        #expect(router.selectedTab == .watch)
+        router.onLoginSuccess()
+        #expect(router.path.isEmpty)
+    }
+
 }

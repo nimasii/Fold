@@ -6,9 +6,30 @@ enum AppState {
     case authenticated
 }
 
+enum AppTab: Int, CaseIterable {
+    case watch, search, library, downloads
+}
+
 @Observable
 final class AppRouter {
-    var path = NavigationPath()
+    var selectedTab: AppTab = .watch
+    private var tabPaths: [AppTab: NavigationPath] = [:]
+    private var entryPath = NavigationPath()
+    var path: NavigationPath {
+        get { appState == .authenticated ? path(for: selectedTab) : entryPath }
+        set {
+            if appState == .authenticated { tabPaths[selectedTab] = newValue }
+            else { entryPath = newValue }
+        }
+    }
+
+    func path(for tab: AppTab) -> NavigationPath { tabPaths[tab] ?? NavigationPath() }
+    func setPath(_ path: NavigationPath, for tab: AppTab) { tabPaths[tab] = path }
+    private func resetNavigation() {
+        entryPath = NavigationPath()
+        tabPaths.removeAll()
+        selectedTab = .watch
+    }
     var appState: AppState
     private(set) var deletedVideoIds: Set<String> = []
     private(set) var watchedChanges: [String: Bool] = [:]
@@ -72,7 +93,7 @@ final class AppRouter {
             guard authState.authorization == nil else { return }
             await VideoCachePreloader.shared.clear()
         }
-        path = NavigationPath()
+        resetNavigation()
         deletedVideoIds.removeAll()
         watchedChanges.removeAll()
         appState = .login
@@ -80,7 +101,7 @@ final class AppRouter {
 
     func onLoginSuccess() {
         didHandleUnauth = false
-        path = NavigationPath()
+        resetNavigation()
         deletedVideoIds.removeAll()
         watchedChanges.removeAll()
         appState = .authenticated
