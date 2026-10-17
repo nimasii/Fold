@@ -27,6 +27,27 @@ final class DependencyContainer {
     let router: AppRouter
 
     private init() {
+        #if DEBUG && targetEnvironment(simulator) && !UI_REVIEW_PREVIEW
+        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture") {
+            keychainService = KeychainService(inMemory: true)
+            authState = AuthState(keychainService: keychainService, loadPersistedCredentials: false)
+            try? authState.setExistingToken("STREAMING_FIXTURE_TOKEN", serverURL: URL(string: StreamingFixtureRepository.base)!)
+            authState.setPrivileges(isSuperuser: true, isStaff: true)
+            apiClient = APIClient(authState: authState)
+            let repository = StreamingFixtureRepository()
+            authRepository = repository; videoRepository = repository; searchRepository = repository
+            channelRepository = repository; downloadRepository = repository; playlistRepository = repository
+            sponsorBlockSettings = SponsorBlockSettings(defaults: UserDefaults(suiteName: "StreamingDesignFixture-v1")!)
+            router = AppRouter(authState: authState)
+            let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("StreamingDesignFixture-v1", isDirectory: true)
+            if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-reset") { try? FileManager.default.removeItem(at: root) }
+            offlineLibrary = OfflineLibrary(authState: authState, root: root)
+            router.onLoginSuccess()
+            if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-login") { router.appState = .login }
+            return
+        }
+        #endif
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("--session-persistence-fixture") {
             keychainService = KeychainService(persistentFixture: true)

@@ -6,7 +6,6 @@ struct LoginView: View {
     @FocusState private var focusedField: Field?
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ScaledMetric(relativeTo: .title2) private var emblemSize = 56
 
     private enum Field: Hashable { case server, token }
     private var hasAddress: Bool { !viewModel.serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
@@ -14,22 +13,14 @@ struct LoginView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                HStack(spacing: 16) {
-                    if !dynamicTypeSize.isAccessibilitySize {
-                        Image(systemName: "play.rectangle.on.rectangle.fill")
-                            .font(.title2)
-                            .foregroundStyle(.tint)
-                            .frame(width: emblemSize, height: emblemSize)
-                            .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 16))
-                            .accessibilityHidden(true)
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Tube Archivist").font(.title2.bold())
-                        Text(String(localized: "connection_tagline"))
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
+                VStack(alignment: .leading, spacing: 18) {
+                    Image(systemName: "play.rectangle.on.rectangle.fill")
+                        .font(.largeTitle).foregroundStyle(.tint).accessibilityHidden(true)
+                    Text(String(localized: "stream_login_headline"))
+                        .font(.largeTitle.bold()).fixedSize(horizontal: false, vertical: true)
+                    Text(String(localized: "connection_tagline")).font(.title3).foregroundStyle(.secondary)
                 }
-                .padding(.top, 8)
+                .padding(.top, 20)
 
                 VStack(alignment: .leading, spacing: 16) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -135,8 +126,8 @@ struct LoginView: View {
         }
         .background(Color(.systemGroupedBackground))
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle(String(localized: "connection_title"))
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle("Tube Archivist")
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()

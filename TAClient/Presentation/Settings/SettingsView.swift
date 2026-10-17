@@ -3,9 +3,20 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var viewModel: SettingsViewModel
     @Environment(AppRouter.self) private var router
+    @Environment(AuthState.self) private var authState
 
     var body: some View {
         Form {
+            Section {
+                VStack(alignment: .leading, spacing: 12) {
+                    Image(systemName: "play.rectangle.fill").font(.largeTitle).foregroundStyle(.tint).accessibilityHidden(true)
+                    Text(String(localized: "stream_preferences_intro")).font(.title2.bold())
+                    if let address = authState.serverURL, let host = URL(string: address)?.host {
+                        Label(host, systemImage: "server.rack").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }.padding(.vertical, 12)
+            } header: { Text(String(localized: "stream_connection")) }
+
             Section {
                 Toggle(
                     String(localized: "settings_sponsorblock_enabled"),
@@ -70,6 +81,6 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(String(localized: "settings_title"))
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
     }
 }

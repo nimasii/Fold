@@ -7,102 +7,52 @@ struct VideoInfoSection: View {
     var showsStatistics: Bool = true
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Title
-            Text(video.title)
-                .font(.title3.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
-
-            // Channel
-            Group {
-                if let onChannelTap, !video.channelId.isEmpty {
-                    Button { onChannelTap(video.channelId) } label: { channelLabel }
-                        .buttonStyle(.plain).accessibilityLabel(video.channelName)
-                } else { channelLabel }
+        VStack(alignment: .leading, spacing: 18) {
+            Text(video.title).font(.title.bold()).fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Text(video.durationStr).monospacedDigit()
+                if !video.publishedShort.isEmpty { Text(video.publishedShort) }
+                if video.watched { Label(String(localized: "filter_watched"), systemImage: "checkmark.circle") }
             }
-
-            // Stats/dates + Media info
-            ViewThatFits(in: .horizontal) {
-                datesAndMedia(short: false)
-                datesAndMedia(short: true)
-            }
-        }
-        .padding(16)
-        .background(Color(.secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .padding(.horizontal)
-    }
-
-    @ViewBuilder
-    private func datesAndMedia(short: Bool) -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                if showsStatistics {
-                    HStack(spacing: 16) {
-                        Label("\(video.viewCount)", systemImage: "eye")
-                        Label("\(video.likeCount)", systemImage: "hand.thumbsup")
+            .font(.subheadline).foregroundStyle(.secondary)
+            if let onChannelTap, !video.channelId.isEmpty {
+                Button { onChannelTap(video.channelId) } label: { channelLabel }
+                    .buttonStyle(.plain).accessibilityLabel(video.channelName)
+                    .accessibilityHint(String(localized: "stream_open_channel"))
+            } else { channelLabel }
+            DisclosureGroup(String(localized: "stream_video_details")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    if showsStatistics {
+                        HStack(spacing: 20) {
+                            Label("\(video.viewCount)", systemImage: "eye")
+                            Label("\(video.likeCount)", systemImage: "hand.thumbsup")
+                        }
                     }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-                if !video.published.isEmpty {
-                    Text(String(localized: "video_detail_published \(short ? video.publishedShort : video.published)"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                if !video.downloaded.isEmpty {
-                    Text(String(localized: "video_detail_downloaded \(short ? video.downloadedShort : video.downloaded)"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            if !video.streams.isEmpty {
-                Spacer()
-                mediaInfoSection
-            }
-        }
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    @ViewBuilder
-    private var mediaInfoSection: some View {
-        VStack(alignment: .trailing, spacing: 4) {
-            ForEach(video.streams, id: \.self) { stream in
-                HStack(spacing: 4) {
-                    Text(stream.type.capitalized)
-                        .fontWeight(.medium)
-                    Text(stream.codec)
-                    if let w = stream.width, let h = stream.height {
-                        Text("\(w)x\(h)")
+                    if !video.published.isEmpty { Text(String(localized: "video_detail_published \(video.published)")) }
+                    if !video.downloaded.isEmpty { Text(String(localized: "video_detail_downloaded \(video.downloaded)")) }
+                    ForEach(video.streams, id: \.self) { stream in
+                        Text([stream.type.capitalized, stream.codec,
+                              stream.width.flatMap { w in stream.height.map { "\(w) × \($0)" } } ?? "",
+                              stream.bitrate > 0 ? "\(stream.bitrate / 1000) kbps" : ""].filter { !$0.isEmpty }.joined(separator: " · "))
                     }
-                    if stream.bitrate > 0 {
-                        Text("\(stream.bitrate / 1000)kbps")
-                    }
+                    Text(String(localized: "video_detail_file_size \(FormattedFileSize.format(video.mediaSize))"))
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize()
+                .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(.top, 12)
             }
-            Text(String(localized: "video_detail_file_size \(FormattedFileSize.format(video.mediaSize))"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize()
+            .font(.subheadline.weight(.medium))
         }
+        .padding(.horizontal, StreamingStyle.gutter)
     }
     private var channelLabel: some View {
-        HStack(spacing: 8) {
-            AuthenticatedAsyncImage(
-                url: video.channelThumbUrl,
-                placeholderColor: Color(.tertiarySystemBackground),
-                localFileURL: localArtwork?.channel, localRevision: localArtwork?.revision ?? 0
-            )
-            .frame(width: 32, height: 32)
-            .clipShape(Circle())
-
-            Text(video.channelName)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-        }
+        HStack(spacing: 12) {
+            AuthenticatedAsyncImage(url: video.channelThumbUrl, placeholderColor: Color(.tertiarySystemBackground),
+                localFileURL: localArtwork?.channel, localRevision: localArtwork?.revision ?? 0)
+                .frame(width: 44, height: 44).clipShape(.circle).accessibilityHidden(true)
+            Text(video.channelName).font(.headline).foregroundStyle(.primary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if onChannelTap != nil {
+                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary).accessibilityHidden(true)
+            }
+        }.frame(minHeight: 48).contentShape(Rectangle())
     }
 }

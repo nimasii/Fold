@@ -30,7 +30,7 @@ final class SessionPersistenceUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["connection.sign-in"].exists)
-        app.buttons["More"].tap(); app.buttons["Downloads"].tap()
+        app.buttons["More"].tap(); app.buttons["watch.private-downloads"].tap()
         XCTAssertTrue(app.navigationBars["Downloads"].waitForExistence(timeout: 10))
         capture(app, "03-maintenance-launch-private-downloads-accessible")
         app.terminate()

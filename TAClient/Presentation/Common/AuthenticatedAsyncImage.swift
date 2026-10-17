@@ -22,6 +22,10 @@ struct AuthenticatedAsyncImage: View {
                     #endif
             }
         }
+        // Cropping does not clip SwiftUI hit testing. A scaled portrait bitmap
+        // can extend beyond its poster and intercept neighboring controls.
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
         .onAppear {
             loadIfNeeded()
         }

@@ -39,6 +39,7 @@ struct PlaylistDetailView: View {
                 .geometryGroup()
             }
         }
+        .background(StreamingStyle.background)
         .navigationTitle(viewModel.playlist?.playlistName ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -76,73 +77,34 @@ struct PlaylistDetailView: View {
     @ViewBuilder
     private var playlistHeader: some View {
         if let playlist = viewModel.playlist {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 12) {
-                    AuthenticatedAsyncImage(url: playlist.playlistThumbnail)
-                        .aspectRatio(16.0 / 9.0, contentMode: .fill)
-                        .frame(width: 120)
-                        .clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(playlist.playlistName)
-                            .font(.headline)
-
-                        if !playlist.playlistChannel.isEmpty {
-                            Button {
-                                viewModel.navigateToChannel(playlist.playlistChannelId)
-                            } label: {
-                                Text(playlist.playlistChannel)
-                                    .font(.subheadline)
-                                    .foregroundStyle(Color.accentColor)
-                            }
-                        }
-
-                        HStack(spacing: 8) {
-                            Text(playlist.playlistType == .custom
-                                 ? String(localized: "playlist_type_custom")
-                                 : String(localized: "playlist_type_regular"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            Text(String(localized: "playlist_entry_count \(playlist.playlistEntries.count)"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+            VStack(alignment: .leading, spacing: 18) {
+                Color(.secondarySystemBackground).aspectRatio(16 / 8, contentMode: .fit)
+                    .overlay { AuthenticatedAsyncImage(url: playlist.playlistThumbnail) }.clipped()
+                    .clipShape(.rect(cornerRadius: 20)).accessibilityHidden(true)
+                Text(String(localized: "stream_collection")).font(.caption.weight(.bold)).tracking(2).foregroundStyle(.secondary)
+                Text(playlist.playlistName).font(.largeTitle.bold()).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Text(String(localized: "playlist_entry_count \(playlist.playlistEntries.count)"))
+                    Text(playlist.playlistType == .custom ? String(localized: "playlist_type_custom") : String(localized: "playlist_type_regular"))
+                }.font(.subheadline).foregroundStyle(.secondary)
+                if !playlist.playlistChannel.isEmpty {
+                    Button { viewModel.navigateToChannel(playlist.playlistChannelId) } label: {
+                        Label(playlist.playlistChannel, systemImage: "person.crop.circle")
+                    }.font(.headline).frame(minHeight: 44)
+                        .disabled(playlist.playlistChannelId.isEmpty)
+                        .accessibilityLabel(playlist.playlistChannel)
                 }
-                .padding(.horizontal)
-
                 if let description = playlist.playlistDescription, !description.isEmpty {
-                    Text(description)
-                        .font(.body)
-                        .padding(.horizontal)
+                    Text(description).font(.subheadline).foregroundStyle(.secondary)
                 }
-
                 if playlist.playlistType == .regular {
-                    HStack {
-                        Spacer()
-                        Button {
-                            Task { await viewModel.toggleSubscription() }
-                        } label: {
-                            Text(playlist.playlistSubscribed
-                                 ? String(localized: "playlist_unsubscribe")
-                                 : String(localized: "playlist_subscribe"))
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(playlist.playlistSubscribed ? Color(.systemGray4) : .accentColor)
-                        .accessibilityLabel(playlist.playlistSubscribed
-                            ? String(localized: "playlist_unsubscribe")
-                            : String(localized: "playlist_subscribe"))
-                        Spacer()
-                    }
-                    .padding(.horizontal)
+                    Button { Task { await viewModel.toggleSubscription() } } label: {
+                        Label(playlist.playlistSubscribed ? String(localized: "playlist_unsubscribe") : String(localized: "playlist_subscribe"),
+                              systemImage: playlist.playlistSubscribed ? "checkmark" : "plus")
+                    }.buttonStyle(.borderedProminent).controlSize(.large).buttonBorderShape(.capsule)
+                        .accessibilityLabel(playlist.playlistSubscribed ? String(localized: "playlist_unsubscribe") : String(localized: "playlist_subscribe"))
                 }
-
-                Divider()
-            }
+            }.padding(.horizontal, StreamingStyle.gutter).padding(.top, 12)
         }
     }
 }

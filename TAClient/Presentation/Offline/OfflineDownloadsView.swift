@@ -15,7 +15,8 @@ struct OfflineDownloadsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 12) {
+            LazyVStack(alignment: .leading, spacing: 24) {
+                deviceHeader
                 if let error = library.storageError {
                     Label(error, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red).padding(.horizontal)
                 }
@@ -24,6 +25,7 @@ struct OfflineDownloadsView: View {
                         description: Text(String(localized: "offline_empty_help")))
                 }
                 if !completed.isEmpty {
+                    MediaSectionHeading(title: String(localized: "stream_ready"))
                     AdaptiveVideoGrid(
                         videos: completed.map(\.displayVideo),
                         onVideoTap: { id in playing = completed.first { $0.id.uuidString == id } },
@@ -39,6 +41,7 @@ struct OfflineDownloadsView: View {
                         refreshableLocalIDs: Set(completed.filter { library.canRefreshDetails($0) }.map { $0.id.uuidString })
                     )
                 }
+                if !transfers.isEmpty { MediaSectionHeading(title: String(localized: "stream_transfers")) }
                 ForEach(transfers) { record in
                     transferRow(record).padding(.horizontal)
                 }
@@ -46,6 +49,7 @@ struct OfflineDownloadsView: View {
             .padding(.vertical)
         }
         .geometryGroup()
+        .background(StreamingStyle.background)
         .navigationTitle(String(localized: "offline_title"))
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -84,6 +88,20 @@ struct OfflineDownloadsView: View {
                 } }
             }
         }
+    }
+
+    private var deviceHeader: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(String(localized: "stream_on_device"), systemImage: "iphone")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(library.totalSize).font(.subheadline).foregroundStyle(.secondary)
+            }
+            Text(String(localized: "offline_private_help")).font(.footnote).foregroundStyle(.secondary)
+            LibraryDestination(title: String(localized: "stream_server_queue"), detail: String(localized: "stream_server_queue_help"), symbol: "server.rack", route: .downloadQueue)
+            Divider()
+        }.padding(.horizontal, StreamingStyle.gutter)
     }
 
     private func artwork(_ record: OfflineRecord) -> LocalVideoArtwork {

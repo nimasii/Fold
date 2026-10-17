@@ -58,12 +58,12 @@ actor ImageCache {
             }
             guard
                   (200...299).contains(httpResponse.statusCode),
-                  let image = UIImage(data: data) else {
+                  let image = ArtworkDecoder.image(from: data) else {
                 return nil
             }
 
             guard authorization?.isActive != false else { return nil }
-            cache.setObject(image, forKey: key, cost: data.count)
+            cache.setObject(image, forKey: key, cost: ArtworkDecoder.cost(of: image))
             return image
         }
 

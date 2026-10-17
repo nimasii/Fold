@@ -80,10 +80,10 @@ struct VideoPlayerSurface<Overlay: View>: View {
                 #endif
             } else {
                 ZStack {
-                    AuthenticatedAsyncImage(url: video.thumbUrl, localFileURL: localArtworkURL)
-                        .aspectRatio(16.0 / 9.0, contentMode: .fill)
-                        .frame(maxWidth: .infinity)
-                        .clipped()
+                    Color.black
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                        .overlay { AuthenticatedAsyncImage(url: video.thumbUrl, localFileURL: localArtworkURL) }
+                        .clipped().accessibilityHidden(true)
 
                     if isBuffering {
                         ProgressView()

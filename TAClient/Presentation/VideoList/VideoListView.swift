@@ -3,6 +3,7 @@ import SwiftUI
 struct VideoListView: View {
     @State var viewModel: VideoListViewModel
     @Environment(AuthState.self) private var authState
+    @Environment(\.dynamicTypeSize) private var typeSize
     @State private var showLogoutConfirmation = false
     @State private var showDeleteConfirmation = false
 
@@ -23,7 +24,19 @@ struct VideoListView: View {
                 )
             } else {
                 ScrollView {
-                    VStack(spacing: 12) {
+                    LazyVStack(alignment: .leading, spacing: 28) {
+                        if !viewModel.isSelecting { quickFilters }
+                        if showsDiscovery, let featured = viewModel.videos.first {
+                            FeaturedVideo(video: featured) { viewModel.navigateToVideo(featured.id) }
+                            if !continuing.isEmpty {
+                                VideoShelf(title: String(localized: "stream_continue"), videos: continuing,
+                                    onOpen: viewModel.navigateToVideo, onChannel: viewModel.navigateToChannel)
+                            }
+                            VideoShelf(title: String(localized: "stream_recent"), videos: Array(viewModel.videos.prefix(8)),
+                                onOpen: viewModel.navigateToVideo, onChannel: viewModel.navigateToChannel)
+                        }
+                        MediaSectionHeading(title: String(localized: "stream_browse"),
+                            subtitle: viewModel.watchFilter.label + " · " + viewModel.sortOption.label)
                         AdaptiveVideoGrid(
                             videos: viewModel.videos,
                             onVideoTap: { videoId in
@@ -62,7 +75,8 @@ struct VideoListView: View {
                 }
             }
         }
-        .navigationTitle(selectedSectionTitle)
+        .background(StreamingStyle.background)
+        .navigationTitle(showsDiscovery ? String(localized: "stream_watch") : selectedSectionTitle)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             if viewModel.isSelecting {
@@ -155,11 +169,12 @@ struct VideoListView: View {
                             Label(String(localized: "offline_title"), systemImage: "arrow.down.circle.fill")
                         }
                         .accessibilityLabel(String(localized: "offline_title"))
+                        .accessibilityIdentifier("watch.private-downloads")
 
                         Button {
                             viewModel.navigateToDownloadQueue()
                         } label: {
-                            Label(String(localized: "download_queue_title"), systemImage: "arrow.down.circle")
+                            Label(String(localized: "stream_server_queue"), systemImage: "server.rack")
                         }
 
                         Button {
@@ -230,6 +245,37 @@ struct VideoListView: View {
                 Task { await viewModel.batchDelete() }
             }
             Button(String(localized: "cancel"), role: .cancel) {}
+        }
+    }
+
+    private var showsDiscovery: Bool {
+        !viewModel.isSelecting && viewModel.sortOption == .downloaded && !viewModel.sortAscending
+            && viewModel.watchFilter == .unwatched && viewModel.vidTypeFilter == .all
+    }
+    private var continuing: [Video] {
+        Array(viewModel.videos.filter { $0.progress > 0 && !$0.watched }.prefix(8))
+    }
+    @ViewBuilder private var quickFilters: some View {
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) { filterButtons }
+                .padding(.horizontal, StreamingStyle.gutter)
+        } else {
+            ScrollView(.horizontal) {
+                HStack(spacing: 10) { filterButtons }.padding(.horizontal, StreamingStyle.gutter)
+            }.scrollIndicators(.hidden).accessibilityIdentifier("watch.filters")
+        }
+    }
+    private var filterButtons: some View {
+        ForEach([WatchFilter.unwatched, .continue, .all], id: \.self) { filter in
+            Button { viewModel.watchFilter = filter } label: {
+                Text(filter.label).font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 18).padding(.vertical, typeSize.isAccessibilitySize ? 8 : 0)
+                    .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : nil, minHeight: 44)
+                    .foregroundStyle(viewModel.watchFilter == filter ? Color(.systemBackground) : Color.primary)
+                    .background(viewModel.watchFilter == filter ? Color.primary : Color(.secondarySystemBackground), in: .capsule)
+            }
+            .buttonStyle(.plain).accessibilityLabel(filter.label)
+            .accessibilityAddTraits(viewModel.watchFilter == filter ? .isSelected : [])
         }
     }
 

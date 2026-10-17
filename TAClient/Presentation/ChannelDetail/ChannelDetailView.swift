@@ -57,6 +57,7 @@ struct ChannelDetailView: View {
                 .geometryGroup()
             }
         }
+        .background(StreamingStyle.background)
         .navigationTitle(viewModel.channel?.channelName ?? "")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -126,59 +127,39 @@ struct ChannelDetailView: View {
     @ViewBuilder
     private var channelHeader: some View {
         if let channel = viewModel.channel {
-            VStack(alignment: .leading, spacing: 12) {
-                // Banner
-                if let bannerUrl = channel.channelBannerUrl {
-                    AuthenticatedAsyncImage(url: bannerUrl)
-                        .aspectRatio(6.2, contentMode: .fit)
-                        .clipped()
+            VStack(alignment: .leading, spacing: 20) {
+                if let bannerURL = channel.channelBannerUrl {
+                    Color(.secondarySystemBackground).aspectRatio(16 / 7, contentMode: .fit)
+                        .overlay { AuthenticatedAsyncImage(url: bannerURL) }.clipped()
+                        .accessibilityHidden(true)
                 }
-
-                HStack(spacing: 12) {
-                    AuthenticatedAsyncImage(
-                        url: channel.channelThumbUrl,
-                        placeholderColor: Color(.tertiarySystemBackground)
-                    )
-                    .frame(width: 64, height: 64)
-                    .clipShape(Circle())
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(channel.channelName)
-                            .font(.headline)
-                        Text(String(localized: "channel_detail_subscribers \(channel.channelSubs)"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    if authState.isPrivileged {
-                        Button {
-                            Task { await viewModel.toggleSubscription() }
-                        } label: {
-                            Text(channel.channelSubscribed
-                                 ? String(localized: "channel_unsubscribe")
-                                 : String(localized: "channel_subscribe"))
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(String(localized: "stream_channel")).font(.caption.weight(.bold)).tracking(2).foregroundStyle(.secondary)
+                    HStack(alignment: .top, spacing: 14) {
+                        AuthenticatedAsyncImage(url: channel.channelThumbUrl)
+                            .frame(width: 64, height: 64).clipShape(.circle).accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(channel.channelName).font(.title.bold()).fixedSize(horizontal: false, vertical: true)
+                            Text(String(localized: "channel_detail_subscribers \(channel.channelSubs)"))
+                                .font(.subheadline).foregroundStyle(.secondary)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(channel.channelSubscribed ? Color(.systemGray4) : .accentColor)
-                        .accessibilityLabel(channel.channelSubscribed
-                            ? String(localized: "channel_unsubscribe")
-                            : String(localized: "channel_subscribe"))
                     }
-                }
-                .padding(.horizontal)
-
-                if let description = channel.channelDescription, !description.isEmpty {
-                    Text(description)
-                        .font(.body)
-                        .padding(.horizontal)
-                }
-
-                Divider()
-                    .padding(.horizontal)
+                    if authState.isPrivileged {
+                        Button { Task { await viewModel.toggleSubscription() } } label: {
+                            Label(channel.channelSubscribed ? String(localized: "channel_unsubscribe") : String(localized: "channel_subscribe"),
+                                  systemImage: channel.channelSubscribed ? "checkmark" : "plus")
+                        }
+                        .buttonStyle(.borderedProminent).controlSize(.large).buttonBorderShape(.capsule)
+                        .accessibilityLabel(channel.channelSubscribed ? String(localized: "channel_unsubscribe") : String(localized: "channel_subscribe"))
+                    }
+                    if let description = channel.channelDescription, !description.isEmpty {
+                        DisclosureGroup(String(localized: "stream_about_channel")) {
+                            Text(description).font(.body).foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                        }.font(.subheadline.weight(.medium))
+                    }
+                }.padding(.horizontal, StreamingStyle.gutter)
+                MediaSectionHeading(title: String(localized: "video_list_title"))
             }
         }
     }

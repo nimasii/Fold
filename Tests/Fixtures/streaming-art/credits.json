@@ -1,0 +1,34 @@
+[
+  {
+    "file": "earthrise.jpg",
+    "nasa_id": "art002e009280b",
+    "title": "Artemis Era Earthrise",
+    "credit": "NASA",
+    "source": "https://images-assets.nasa.gov/image/art002e009280b/art002e009280b~large.jpg",
+    "bytes": 49150
+  },
+  {
+    "file": "orbit.jpg",
+    "nasa_id": "art002e016299",
+    "title": "Earthrise Captured by Orion",
+    "credit": "NASA",
+    "source": "https://images-assets.nasa.gov/image/art002e016299/art002e016299~large.jpg",
+    "bytes": 113307
+  },
+  {
+    "file": "moon.jpg",
+    "nasa_id": "art002e012673",
+    "title": "A Terrain of Ancient Impacts",
+    "credit": "NASA",
+    "source": "https://images-assets.nasa.gov/image/art002e012673/art002e012673~large.jpg",
+    "bytes": 175407
+  },
+  {
+    "file": "apollo.jpg",
+    "nasa_id": "as08-14-2383",
+    "title": "Apollo8 Earthrise",
+    "credit": "NASA",
+    "source": "https://images-assets.nasa.gov/image/as08-14-2383/as08-14-2383~medium.jpg",
+    "bytes": 67035
+  }
+]

@@ -2,6 +2,8 @@ import SwiftUI
 
 struct PlaylistListView: View {
     @State var viewModel: PlaylistListViewModel
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @State private var deleting: Playlist?
 
     var body: some View {
         @Bindable var viewModel = viewModel
@@ -20,7 +22,7 @@ struct PlaylistListView: View {
                 )
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 12) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 300 : 160), spacing: 16)], alignment: .leading, spacing: 24) {
                         ForEach(viewModel.playlists) { playlist in
                             Button {
                                 viewModel.navigateToPlaylist(playlist.playlistId)
@@ -30,7 +32,7 @@ struct PlaylistListView: View {
                             .buttonStyle(.plain)
                             .contextMenu {
                                 Button(role: .destructive) {
-                                    Task { await viewModel.deletePlaylist(playlist.playlistId, deleteVideos: false) }
+                                    deleting = playlist
                                 } label: {
                                     Label(String(localized: "playlist_delete"), systemImage: "trash")
                                 }
@@ -47,15 +49,16 @@ struct PlaylistListView: View {
                                 Task { await viewModel.loadMoreIfNeeded() }
                             }
                     }
-                    .padding()
+                    .padding(StreamingStyle.gutter)
                 }
                 .refreshable {
                     await viewModel.refresh()
                 }
             }
         }
+        .background(StreamingStyle.background)
         .navigationTitle(String(localized: "playlist_list_title"))
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
@@ -93,6 +96,14 @@ struct PlaylistListView: View {
                 Task { await viewModel.createCustomPlaylist() }
             }
         }
+        .confirmationDialog(String(localized: "playlist_delete_title"), isPresented: Binding(
+            get: { deleting != nil }, set: { if !$0 { deleting = nil } }), titleVisibility: .visible) {
+            Button(String(localized: "playlist_delete_keep_videos"), role: .destructive) {
+                if let playlist = deleting { Task { await viewModel.deletePlaylist(playlist.id, deleteVideos: false) } }
+                deleting = nil
+            }
+            Button(String(localized: "cancel"), role: .cancel) { deleting = nil }
+        }
         .task {
             if viewModel.playlists.isEmpty {
                 await viewModel.loadPlaylists()
@@ -103,47 +114,22 @@ struct PlaylistListView: View {
 
 private struct PlaylistRow: View {
     let playlist: Playlist
-
+    @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
-        HStack(spacing: 12) {
-            AuthenticatedAsyncImage(url: playlist.playlistThumbnail)
-                .aspectRatio(16.0 / 9.0, contentMode: .fill)
-                .frame(width: 120)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(playlist.playlistName)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .lineLimit(2)
-
-                if !playlist.playlistChannel.isEmpty {
-                    Text(playlist.playlistChannel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+        VStack(alignment: .leading, spacing: 10) {
+            Color(.secondarySystemBackground).aspectRatio(16 / 11, contentMode: .fit)
+                .overlay { AuthenticatedAsyncImage(url: playlist.playlistThumbnail) }.clipped()
+                .overlay(alignment: .bottomLeading) {
+                    Image(systemName: "rectangle.stack.fill").font(.body).foregroundStyle(.white)
+                        .padding(10).background(.black.opacity(0.7), in: .circle).padding(10)
                 }
-
-                HStack(spacing: 8) {
-                    Text(playlist.playlistType == .custom
-                         ? String(localized: "playlist_type_custom")
-                         : String(localized: "playlist_type_regular"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color(.tertiarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-
-                    Text(String(localized: "playlist_entry_count \(playlist.playlistEntries.count)"))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            Spacer()
-        }
+                .clipShape(.rect(cornerRadius: StreamingStyle.corner)).accessibilityHidden(true)
+            Text(playlist.playlistName).font(.headline).foregroundStyle(.primary)
+                .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
+            Text(String(localized: "playlist_entry_count \(playlist.playlistEntries.count)"))
+                .font(.caption).foregroundStyle(.secondary)
+            if !playlist.playlistChannel.isEmpty { Text(playlist.playlistChannel).font(.caption).foregroundStyle(.secondary) }
+        }.frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(playlist.playlistName), \(playlist.playlistChannel)")
     }

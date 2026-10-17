@@ -28,19 +28,21 @@ struct AdaptiveVideoGrid: View {
     var onEnterSelection: ((String) -> Void)? = nil
     var onToggleSelection: ((String) -> Void)? = nil
 
-    private let columns = [GridItem(.adaptive(minimum: 300), spacing: 16)]
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var columns: [GridItem] { [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 300 : 160), spacing: 16)] }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 16) {
+        let nearEnd = Set(videos.suffix(5).map(\.id))
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
             ForEach(videos) { video in
                 VideoCardView(video: video, onChannelTap: isSelecting ? nil : onChannelTap,
-                              localArtwork: localArtwork[video.id], supplementaryText: supplementaryText[video.id])
+                              localArtwork: localArtwork[video.id], supplementaryText: supplementaryText[video.id],
+                              onOpen: {
+                                  if isSelecting { onToggleSelection?(video.id) }
+                                  else { onVideoTap(video.id) }
+                              }, isSelected: isSelecting && selectedIds.contains(video.youtubeId),
+                              onSelect: onEnterSelection != nil ? { if !isSelecting { onEnterSelection?(video.youtubeId) } } : nil)
                     .contentShape(Rectangle())
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction {
-                        if isSelecting { onToggleSelection?(video.youtubeId) }
-                        else { onVideoTap(video.youtubeId) }
-                    }
                     .overlay {
                         if isSelecting {
                             ZStack(alignment: .topLeading) {
@@ -50,21 +52,7 @@ struct AdaptiveVideoGrid: View {
                                     .foregroundStyle(selectedIds.contains(video.youtubeId) ? Color.accentColor : .white)
                                     .shadow(radius: 2)
                                     .padding(8)
-                            }
-                        }
-                    }
-                    .onTapGesture {
-                        if isSelecting {
-                            onToggleSelection?(video.youtubeId)
-                        } else {
-                            onVideoTap(video.youtubeId)
-                        }
-                    }
-                    .if(onEnterSelection != nil) { view in
-                        view.onLongPressGesture {
-                            if !isSelecting {
-                                onEnterSelection?(video.youtubeId)
-                            }
+                            }.allowsHitTesting(false).accessibilityHidden(true)
                         }
                     }
                     .if(onEnterSelection == nil) { view in
@@ -96,13 +84,14 @@ struct AdaptiveVideoGrid: View {
                         }
                     }
                     .onAppear {
-                        if let index = videos.firstIndex(where: { $0.id == video.id }),
-                           index >= videos.count - 5 {
+                        if nearEnd.contains(video.id) {
                             onNearEnd?()
                         }
                     }
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, StreamingStyle.gutter)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("video.grid")
     }
 }
