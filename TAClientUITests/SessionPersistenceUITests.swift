@@ -12,6 +12,7 @@ final class SessionPersistenceUITests: XCTestCase {
         let server = app.textFields.firstMatch
         XCTAssertTrue(server.waitForExistence(timeout: 10))
         server.tap(); server.typeText("http://127.0.0.1:18079")
+        if app.buttons["Done"].firstMatch.isHittable { app.buttons["Done"].firstMatch.tap() }
         app.buttons["connection.sign-in"].tap()
         let link = app.webViews.links["Sign in to fixture"]
         XCTAssertTrue(link.waitForExistence(timeout: 10)); link.tap()
@@ -30,7 +31,7 @@ final class SessionPersistenceUITests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 10))
         XCTAssertFalse(app.buttons["connection.sign-in"].exists)
-        app.buttons["More"].tap(); app.buttons["watch.private-downloads"].tap()
+        app.tabBars.buttons["Downloads"].tap()
         XCTAssertTrue(app.navigationBars["Downloads"].waitForExistence(timeout: 10))
         capture(app, "03-maintenance-launch-private-downloads-accessible")
         app.terminate()

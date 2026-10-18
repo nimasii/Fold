@@ -1,171 +1,175 @@
 import XCTest
 
-/// Production screens, isolated synthetic account, credited test art, and real local media.
+/// Shipping views and services, an isolated account, credited stills and loopback media.
 final class StreamingRedesignUITests: XCTestCase {
     override func tearDown() async throws { try await mode(offline: false) }
-    @MainActor func testMainScreensAndNativePlayback() async throws {
+
+    @MainActor func testThreeSectionsSearchMenusAndSettings() {
         continueAfterFailure = false
-        try await mode(offline: false)
         let app = launch(dark: true)
-        XCTAssertTrue(app.navigationBars["Watch"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.buttons["More"].exists)
-        capture(app, "01-watch-dark")
-        app.buttons["View video, The Earth, from here"].tap()
-        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 10))
-        capture(app, "02-video-native-dark")
-        app.buttons["Play"].tap()
-        XCTAssertTrue(app.otherElements["video.player.surface"].firstMatch.waitForExistence(timeout: 15))
-        // Native AVKit controls and actual generated twelve-second media.
-        revealPlayer(app)
-        XCTAssertTrue(app.buttons["Fullscreen Button"].waitForExistence(timeout: 10))
-        let elapsed = app.staticTexts["Elapsed Time"]
-        let advancing = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label MATCHES %@", "0:0[1-9].*"), object: elapsed)
-        let result = await XCTWaiter.fulfillment(of: [advancing], timeout: 10)
-        XCTAssertEqual(result, .completed)
-        capture(app, "03-native-controls-dark")
-        app.buttons["Play/Pause"].tap()
-        app.buttons["Fullscreen Button"].tap()
-        XCUIDevice.shared.orientation = .landscapeRight
-        try await Task.sleep(for: .seconds(1))
-        if !app.buttons["Done"].exists && !app.buttons["Close"].exists {
-            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        XCTAssertEqual(app.tabBars.buttons.count, 3)
+        XCTAssertEqual(Set(app.tabBars.buttons.allElementsBoundByIndex.map(\.label)), Set(["Library", "Downloads", "Queue"]))
+        let field = app.searchFields["library.search"]
+        let searchControl = app.buttons["library.search.open"]
+        XCTAssertTrue(searchControl.waitForExistence(timeout: 10))
+        XCTAssertGreaterThan(searchControl.frame.minY, app.frame.height * 0.65)
+        capture(app, "01-library-three-sections-dark")
+        for section in ["Library", "Downloads", "Queue"] {
+            app.tabBars.buttons[section].tap()
+            app.buttons["section.menu"].tap()
+            XCTAssertTrue(app.buttons["section.settings"].exists)
+            XCTAssertTrue(app.buttons["section.filters"].exists)
+            let menuButtons = app.collectionViews.buttons.allElementsBoundByIndex.map(\.label)
+            XCTAssertEqual(Set(menuButtons), Set(["Settings", "Filters"]))
+            capture(app, "02-menu-" + section.lowercased())
+            app.buttons["section.settings"].tap()
+            XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.searchFields["library.search"].exists)
+            back(app)
         }
-        capture(app, "03b-native-fullscreen-landscape")
-        let tree = XCTAttachment(string: app.debugDescription)
-        tree.name = "stream-fullscreen-tree"; tree.lifetime = .keepAlways; add(tree)
-        let done = app.buttons["Done"].exists ? app.buttons["Done"] : app.buttons["Close"]
-        XCTAssertTrue(done.waitForExistence(timeout: 5)); done.tap()
-        XCUIDevice.shared.orientation = .portrait
-        let channel = app.buttons["Orbital Journal"].firstMatch
-        for _ in 0..<2 where !channel.isHittable { app.swipeUp() }
-        channel.tap()
-        XCTAssertTrue(app.navigationBars["Orbital Journal"].waitForExistence(timeout: 10))
-        capture(app, "03c-channel-detail-dark")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.tabBars.buttons["Search"].tap()
-        let search = app.searchFields.firstMatch
-        XCTAssertTrue(search.waitForExistence(timeout: 10))
-        capture(app, "04-search-idle-dark")
-        search.tap(); search.typeText("Earth")
+        // A global bottom field always routes to the Library, never Queue filtering.
+        app.buttons["library.search.open"].tap()
+        XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Earth")
+        XCTAssertTrue(app.navigationBars["Library"].exists)
         XCTAssertTrue(app.buttons["video.card.earthrise"].waitForExistence(timeout: 10))
-        if app.keyboards.buttons["Search"].exists { app.keyboards.buttons["Search"].tap() }
-        capture(app, "05-search-results-dark")
-        app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 10))
-        capture(app, "06-library-dark")
-        app.buttons["library.destination.rectangle.stack"].tap()
-        XCTAssertTrue(app.staticTexts["Above the atmosphere"].waitForExistence(timeout: 10))
-        capture(app, "07-collections-dark")
-        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Above the atmosphere")).firstMatch.tap()
-        XCTAssertTrue(app.buttons["video.card.earthrise"].waitForExistence(timeout: 10))
-        capture(app, "08-collection-detail-dark")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        let settings = app.buttons["library.destination.slider.horizontal.3"]
-        for _ in 0..<3 where !settings.isHittable { app.swipeUp() }
-        settings.tap()
-        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 10))
-        capture(app, "09-settings-dark")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        let queue = app.buttons["library.destination.server.rack"]
-        for _ in 0..<3 where !queue.isHittable { app.swipeUp() }
-        queue.tap()
-        XCTAssertTrue(app.navigationBars["Server queue"].waitForExistence(timeout: 10))
-        XCTAssertTrue(app.segmentedControls.buttons["Pending"].exists)
-        XCTAssertTrue(app.staticTexts["The Earth, from here"].waitForExistence(timeout: 10))
-        capture(app, "10-server-pending-dark")
-        app.segmentedControls.buttons["Ignored"].tap()
-        XCTAssertTrue(app.staticTexts["The first Earthrise"].waitForExistence(timeout: 10))
-        capture(app, "11-server-ignored-dark")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        app.tabBars.buttons["Downloads"].tap()
-        let local = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "video.card.", "On the edge of daylight")).firstMatch
-        XCTAssertTrue(local.waitForExistence(timeout: 45))
-        capture(app, "12-private-downloads-dark")
-        try await mode(offline: true)
-        let before = try await counts()
-        local.tap()
-        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 10)); app.buttons["Play"].tap()
-        XCTAssertTrue(app.otherElements["video.player.surface"].firstMatch.waitForExistence(timeout: 15))
-        revealPlayer(app)
-        XCTAssertTrue(app.buttons["Fullscreen Button"].waitForExistence(timeout: 10))
-        capture(app, "13-private-native-offline-dark")
-        let after = try await counts()
-        XCTAssertEqual(before["mediaRequests"], after["mediaRequests"], "Private playback must use its local file")
-        try await mode(offline: false)
+        XCTAssertEqual(field.value as? String, "Earth")
+        capture(app, "03a-bottom-search-keyboard")
+        field.typeText("\n")
+        capture(app, "03-bottom-library-search-results")
+        app.buttons["video.card.earthrise"].firstMatch.tap()
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 10))
+        back(app)
+        XCTAssertEqual(field.value as? String, "Earth")
+        field.buttons["Clear text"].tap()
+        XCTAssertTrue(app.staticTexts["Find your next watch."].waitForExistence(timeout: 5))
+        field.typeText("no fixture matches this query")
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "No Results")).firstMatch.waitForExistence(timeout: 10))
+        closeSearch(app)
+        XCTAssertTrue(app.descendants(matching: .any)["watch.featured"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertEqual(app.tabBars.buttons.count, 3)
         app.terminate()
     }
 
-    @MainActor func testLightMainScreensAndLogin() {
-        continueAfterFailure = false
-        let app = launch(dark: false)
-        XCTAssertTrue(app.navigationBars["Watch"].waitForExistence(timeout: 10))
-        capture(app, "14-watch-light")
-        app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 10))
-        capture(app, "15-library-light")
-        app.tabBars.buttons["Downloads"].tap()
-        XCTAssertTrue(app.navigationBars["Downloads"].waitForExistence(timeout: 10))
-        capture(app, "16-downloads-light")
-        app.tabBars.buttons["Watch"].tap()
-        app.buttons["More"].tap(); app.buttons["Log Out"].tap()
-        app.buttons["Log Out"].tap()
-        XCTAssertTrue(app.buttons["connection.sign-in"].waitForExistence(timeout: 10))
-        capture(app, "17-login-light")
-        app.buttons["Use an existing API token"].tap()
-        XCTAssertTrue(app.secureTextFields["API token"].exists)
-        app.terminate()
-    }
-
-    @MainActor func testAccessibilityTextAndSelection() {
-        continueAfterFailure = false
-        let app = launch(dark: true, additional: ["--streaming-fixture-accessibility", "--streaming-fixture-long-list"])
-        XCTAssertTrue(app.navigationBars["Watch"].waitForExistence(timeout: 10))
-        capture(app, "18-watch-accessibility")
-        // All exposes the archive without the discovery shelves.
-        app.buttons["All"].firstMatch.tap()
-        XCTAssertTrue(app.descendants(matching: .any)["watch.featured"].firstMatch.waitForNonExistence(timeout: 5))
-        capture(app, "18b-all-filter-accessibility")
-        let card = app.otherElements["video.grid"].firstMatch.buttons["video.card.earthrise"].firstMatch
-        XCTAssertTrue(card.waitForExistence(timeout: 10))
-        card.press(forDuration: 1)
-        XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
-        capture(app, "19-selection-accessibility")
-        app.buttons["Cancel"].tap()
-        app.tabBars.buttons["Library"].tap()
-        XCTAssertTrue(app.navigationBars["Library"].waitForExistence(timeout: 10))
-        capture(app, "20-library-accessibility")
-        app.tabBars.buttons["Downloads"].tap()
-        XCTAssertTrue(app.navigationBars["Downloads"].waitForExistence(timeout: 10))
-        capture(app, "21-downloads-accessibility")
-        app.terminate()
-    }
-
-    @MainActor func testArchiveScrollAndTabState() async {
+    @MainActor func testIndependentStacksCollectionsAndLibraryFilters() async {
         continueAfterFailure = false
         let app = launch(dark: false, additional: ["--streaming-fixture-long-list"])
-        XCTAssertTrue(app.buttons["All"].firstMatch.waitForExistence(timeout: 10))
-        app.buttons["All"].firstMatch.tap()
-        let scroll = app.scrollViews.firstMatch
-        for _ in 0..<5 { scroll.swipeUp() }
-        capture(app, "22-archive-after-scrolling")
-        let visible = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "video.card.")).allElementsBoundByIndex.first { $0.isHittable }
-        XCTAssertNotNil(visible)
-        let id = visible!.identifier
+        chooseFilter(app, "library.filter.watch.all")
+        XCTAssertTrue(app.descendants(matching: .any)["watch.featured"].firstMatch.waitForNonExistence(timeout: 5))
+        app.buttons["library.playlists"].tap()
+        XCTAssertTrue(app.navigationBars["Playlists"].waitForExistence(timeout: 5))
+        app.tabBars.buttons["Downloads"].tap(); openSettings(app)
+        app.tabBars.buttons["Queue"].tap(); openSettings(app)
         app.tabBars.buttons["Library"].tap()
-        app.tabBars.buttons["Watch"].tap()
+        XCTAssertTrue(app.navigationBars["Playlists"].exists)
+        app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Above the atmosphere")).firstMatch.tap()
+        XCTAssertTrue(app.buttons["video.card.earthrise"].waitForExistence(timeout: 5))
+        capture(app, "04-collections-with-three-section-navigation")
+        app.tabBars.buttons["Downloads"].tap(); XCTAssertTrue(app.navigationBars["Settings"].exists)
+        back(app); XCTAssertTrue(app.navigationBars["Downloads"].exists)
+        app.tabBars.buttons["Queue"].tap(); XCTAssertTrue(app.navigationBars["Settings"].exists)
+        back(app); XCTAssertTrue(app.navigationBars["Queue"].exists)
+        // Search intentionally takes the Library root; other section paths are intact.
+        app.buttons["library.search.open"].tap()
+        app.searchFields["library.search"].typeText("Lunar")
+        XCTAssertTrue(app.buttons["video.card.moon"].waitForExistence(timeout: 10))
+        closeSearch(app)
+        XCTAssertTrue(app.buttons["library.playlists"].waitForExistence(timeout: 5))
+        let scroll = app.scrollViews.firstMatch
+        for _ in 0..<4 { scroll.swipeUp() }
+        let top = app.navigationBars.firstMatch.frame.maxY + 12
+        let bottom = app.buttons["library.search.open"].frame.minY - 12
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "video.card.")).allElementsBoundByIndex.first {
+            $0.isHittable && $0.frame.minY > top && $0.frame.maxY < bottom
+        }!
+        let id = card.identifier
+        app.tabBars.buttons["Downloads"].tap(); app.tabBars.buttons["Library"].tap()
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: app.buttons[id].firstMatch)
-        let restored = await XCTWaiter.fulfillment(of: [ready], timeout: 5)
-        capture(app, "23-archive-tab-return")
-        let tree = XCTAttachment(string: "Expected visible card: " + id + "\n" + app.debugDescription)
-        tree.name = "archive-tab-return-tree"; tree.lifetime = .keepAlways; add(tree)
-        XCTAssertEqual(restored, .completed, "Switching tabs must preserve the archive scroll position")
+        let result = await XCTWaiter.fulfillment(of: [ready], timeout: 5)
+        XCTAssertEqual(result, .completed)
         app.buttons[id].firstMatch.tap()
-        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 10), "Normal card activation must still open video details")
-        app.navigationBars.buttons.element(boundBy: 0).tap()
-        XCTAssertTrue(app.buttons[id].firstMatch.waitForExistence(timeout: 5), "One activation must push one detail route")
+        XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 5))
+        back(app)
+        capture(app, "05-library-scroll-return")
         app.terminate()
+    }
+
+    @MainActor func testQueueActionsPrivatePlaybackAndLogout() async throws {
+        continueAfterFailure = false
+        try await mode(offline: false)
+        let app = launch(dark: false)
+        app.tabBars.buttons["Queue"].tap()
+        XCTAssertTrue(app.buttons["queue.start"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["queue.rescan"].exists)
+        capture(app, "06-queue-contextual-controls")
+        app.buttons["queue.start"].tap(); app.buttons["queue.rescan"].tap()
+        app.textFields["queue.add-input"].tap(); app.textFields["queue.add-input"].typeText("TESTVIDEO01")
+        app.buttons["queue.add"].tap()
+        if app.keyboards.buttons["Done"].isHittable { app.keyboards.buttons["Done"].tap() }
+        let row = app.cells.containing(.staticText, identifier: "The Earth, from here").firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 5)); row.swipeLeft()
+        app.buttons["Ignore"].firstMatch.tap()
+        XCTAssertTrue(app.staticTexts["The Earth, from here"].waitForNonExistence(timeout: 5))
+        chooseFilter(app, "queue.filter.ignore")
+        XCTAssertTrue(app.staticTexts["The Earth, from here"].waitForExistence(timeout: 5))
+        capture(app, "07-queue-ignored-filter")
+        app.cells.containing(.staticText, identifier: "The Earth, from here").firstMatch.swipeLeft()
+        app.buttons["Delete"].firstMatch.tap()
+        XCTAssertTrue(app.sheets.firstMatch.waitForExistence(timeout: 5))
+        if app.buttons["Cancel"].exists { app.buttons["Cancel"].tap() }
+        else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)).tap() }
+        XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["The Earth, from here"].exists)
+        app.tabBars.buttons["Downloads"].tap()
+        let local = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "video.card.", "On the edge of daylight")).firstMatch
+        XCTAssertTrue(app.navigationBars["Downloads"].waitForExistence(timeout: 5))
+        for _ in 0..<2 where !local.exists { app.swipeUp() }
+        XCTAssertTrue(local.waitForExistence(timeout: 20))
+        chooseFilter(app, "downloads.filter.transfers")
+        XCTAssertTrue(app.staticTexts["No downloads match this filter"].waitForExistence(timeout: 5))
+        chooseFilter(app, "downloads.filter.ready")
+        XCTAssertTrue(local.waitForExistence(timeout: 5))
+        capture(app, "08-private-downloads-filtered")
+        app.buttons["downloads.info"].tap()
+        XCTAssertTrue(app.buttons["Done"].waitForExistence(timeout: 5)); app.buttons["Done"].tap()
+        try await mode(offline: true)
+        let before = try await counts()
+        local.tap(); XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 10)); app.buttons["Play"].tap()
+        XCTAssertTrue(app.buttons["Pin player"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.searchFields["library.search"].exists)
+        capture(app, "09-native-private-playback-offline")
+        let after = try await counts(); XCTAssertEqual(before["mediaRequests"], after["mediaRequests"])
+        back(app); try await mode(offline: false)
+        openSettings(app)
+        let logout = app.buttons["settings.logout"]
+        for _ in 0..<6 where !logout.isHittable { app.swipeUp() }
+        logout.tap()
+        XCTAssertTrue(app.sheets.buttons["Log Out"].waitForExistence(timeout: 5))
+        app.sheets.buttons["Log Out"].tap()
+        XCTAssertTrue(app.buttons["connection.sign-in"].waitForExistence(timeout: 10))
+        app.terminate()
+    }
+
+    @MainActor func testAccessibilitySearchAndLegacySafeArea() {
+        continueAfterFailure = false
+        for legacy in [false, true] {
+            let app = launch(dark: true, additional: legacy ? ["--navigation-legacy-search"] : ["--streaming-fixture-accessibility"])
+            let field = app.searchFields["library.search"]
+            XCTAssertTrue(app.buttons["library.search.open"].waitForExistence(timeout: 10))
+            XCTAssertTrue(app.buttons["library.search.open"].isHittable)
+            capture(app, legacy ? "11-safe-area-fallback" : "10-accessibility-adaptive-search")
+            app.buttons["library.search.open"].tap(); XCTAssertTrue(field.waitForExistence(timeout: 5)); field.typeText("Earth")
+            XCTAssertTrue(app.buttons["video.card.earthrise"].waitForExistence(timeout: 10))
+            XCTAssertTrue(searchClose(app).isHittable)
+            closeSearch(app)
+            XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+            chooseFilter(app, "library.filter.watch.all")
+            let card = app.otherElements["video.grid"].firstMatch.buttons["video.card.earthrise"].firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 5)); card.press(forDuration: 1)
+            XCTAssertTrue(app.buttons["Cancel"].waitForExistence(timeout: 5))
+            app.buttons["Cancel"].tap()
+            app.terminate()
+        }
     }
 
     @MainActor private func launch(dark: Bool, additional: [String] = []) -> XCUIApplication {
@@ -176,18 +180,26 @@ final class StreamingRedesignUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["streaming.fixture-label"].waitForExistence(timeout: 10))
         return app
     }
-    @MainActor private func revealPlayer(_ app: XCUIApplication) {
-        if !app.buttons["Fullscreen Button"].isHittable {
-            app.otherElements["video.player.surface"].firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.75)).tap()
-        }
+    @MainActor private func searchClose(_ app: XCUIApplication) -> XCUIElement {
+        app.buttons["library.search.cancel"]
     }
+    @MainActor private func closeSearch(_ app: XCUIApplication) { searchClose(app).tap() }
+    @MainActor private func chooseFilter(_ app: XCUIApplication, _ id: String) {
+        app.buttons["section.menu"].tap(); app.buttons["section.filters"].tap()
+        let button = app.buttons[id]
+        for _ in 0..<4 where !button.isHittable { app.swipeUp() }
+        button.tap()
+    }
+    @MainActor private func openSettings(_ app: XCUIApplication) {
+        app.buttons["section.menu"].tap(); app.buttons["section.settings"].tap()
+        XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: 5))
+    }
+    @MainActor private func back(_ app: XCUIApplication) { app.navigationBars.buttons.element(boundBy: 0).tap() }
     @MainActor private func capture(_ app: XCUIApplication, _ name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
-        attachment.name = name; attachment.lifetime = .keepAlways; add(attachment)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
     private func mode(offline: Bool) async throws {
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:18084/mode")!)
-        request.timeoutInterval = 5
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:18084/mode")!); request.timeoutInterval = 5
         request.httpMethod = "POST"; request.httpBody = try JSONSerialization.data(withJSONObject: ["offline": offline])
         _ = try await URLSession.shared.data(for: request)
     }

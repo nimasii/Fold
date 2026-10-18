@@ -80,20 +80,48 @@ struct AppRouterTests {
         let router = AppRouter(authState: auth)
         router.onLoginSuccess()
         router.navigate(to: .videoDetail(videoId: "one"))
-        router.selectedTab = .library
+        router.selectedTab = .downloads
         #expect(router.path.isEmpty)
         router.navigate(to: .playlistList)
         router.navigate(to: .playlistDetail(playlistId: "list"))
         router.goBack()
         #expect(router.path.count == 1)
-        router.selectedTab = .watch
+        router.selectedTab = .library
         #expect(router.path.count == 1)
-        #expect(router.path(for: .search).isEmpty)
+        #expect(router.path(for: .queue).isEmpty)
         router.handleUnauthorized()
         for tab in AppTab.allCases { #expect(router.path(for: tab).isEmpty) }
-        #expect(router.selectedTab == .watch)
+        #expect(router.selectedTab == .library)
         router.onLoginSuccess()
         #expect(router.path.isEmpty)
+    }
+
+    @Test @MainActor func librarySearchIsContextWithinThreeSections() {
+        #expect(AppTab.allCases == [.library, .downloads, .queue])
+        let auth = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
+        let router = AppRouter(authState: auth)
+        router.onLoginSuccess()
+        router.navigate(to: .playlistList)
+        router.selectedTab = .downloads
+        router.navigate(to: .settings)
+        router.selectedTab = .queue
+        router.navigate(to: .settings)
+        router.beginLibrarySearch()
+        #expect(router.selectedTab == .library)
+        #expect(router.path.isEmpty)
+        #expect(router.isLibrarySearchActive)
+        #expect(router.path(for: .downloads).count == 1)
+        #expect(router.path(for: .queue).count == 1)
+        router.librarySearchQuery = "Earth"
+        router.cancelLibrarySearch()
+        #expect(router.librarySearchQuery.isEmpty)
+        #expect(!router.isLibrarySearchActive)
+        router.beginLibrarySearch()
+        router.librarySearchQuery = "Moon"
+        router.handleUnauthorized()
+        #expect(router.librarySearchQuery.isEmpty)
+        #expect(!router.isLibrarySearchActive)
+        for tab in AppTab.allCases { #expect(router.path(for: tab).isEmpty) }
     }
 
 }

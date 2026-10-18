@@ -103,102 +103,56 @@ struct VideoShelf: View {
     }
 }
 
-struct LibraryDestination: View {
-    let title: String
-    let detail: String
-    let symbol: String
-    let route: Route
-    var body: some View {
-        NavigationLink(value: route) {
-            HStack(spacing: 16) {
-                Image(systemName: symbol).font(.title3).foregroundStyle(.tint)
-                    .frame(width: 44, height: 44)
-                    .background(.tint.opacity(0.1), in: .rect(cornerRadius: 14))
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title).font(.headline)
-                    Text(detail).font(.caption).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading).padding(.vertical, 10)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain).accessibilityLabel(title + ", " + detail)
-        .accessibilityIdentifier("library.destination." + symbol)
-    }
-}
-
-/// Uses existing destinations and device records; no recommendations or history are synthesized.
-struct StreamingLibraryView: View {
-    @Environment(OfflineLibrary.self) private var library
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Image(systemName: "rectangle.stack.fill").font(.largeTitle).foregroundStyle(.tint).accessibilityHidden(true)
-                    Text(String(localized: "stream_library_intro")).font(.title2.bold())
-                    Text(String(localized: "stream_library_description")).font(.body).foregroundStyle(.secondary)
-                }.padding(.top, 16)
-                if let record = library.records.first(where: { $0.status == .ready }) {
-                    NavigationLink(value: Route.offlineDownloads) {
-                        Color(.secondarySystemBackground).aspectRatio(16 / 9, contentMode: .fit)
-                            .overlay {
-                                AuthenticatedAsyncImage(url: nil, localFileURL: library.thumbnailURL(record.id), localRevision: library.artworkRevision)
-                            }
-                            .overlay { LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom) }
-                            .overlay(alignment: .bottomLeading) {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(String(localized: "stream_on_device")).font(.title2.bold())
-                                    Text(String(localized: "stream_ready") + " · " + library.totalSize).font(.subheadline)
-                                }.foregroundStyle(.white).padding(20)
-                            }.clipped().clipShape(.rect(cornerRadius: 20))
-                    }.buttonStyle(MediaPressStyle()).accessibilityLabel(String(localized: "offline_title"))
-                }
-                VStack(spacing: 0) {
-                    LibraryDestination(title: String(localized: "playlist_list_title"), detail: String(localized: "stream_collections_help"), symbol: "rectangle.stack", route: .playlistList)
-                    Divider()
-                    LibraryDestination(title: String(localized: "offline_title"), detail: library.totalSize + " · " + String(localized: "offline_on_device"), symbol: "arrow.down.circle", route: .offlineDownloads)
-                    Divider()
-                    LibraryDestination(title: String(localized: "stream_server_queue"), detail: String(localized: "stream_server_queue_help"), symbol: "server.rack", route: .downloadQueue)
-                    Divider()
-                    LibraryDestination(title: String(localized: "settings_title"), detail: String(localized: "stream_settings_help"), symbol: "slider.horizontal.3", route: .settings)
-                }
-            }
-            .padding(.horizontal, StreamingStyle.gutter).padding(.bottom, 28)
-        }
-        .background(StreamingStyle.background)
-        .navigationTitle(String(localized: "stream_library"))
-        .navigationBarTitleDisplayMode(.large)
-    }
-}
-
 #if !UI_REVIEW_PREVIEW
 struct StreamingTabs<Destination: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(DependencyContainer.self) private var container
     @Environment(AppRouter.self) private var router
     @ViewBuilder let destination: (Route) -> Destination
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        // Large discovery content can intercept native accessory taps on compact
+        // screens. Accessibility sizes use the keyboard-safe inset placement.
+        if #available(iOS 26.1, *), !usesLegacySearch, !dynamicTypeSize.isAccessibilitySize {
+            tabs.tabViewBottomAccessory(isEnabled: showsSearch) { BottomLibrarySearch() }
+        } else {
+            tabs.safeAreaInset(edge: .bottom, spacing: 0) {
+                if showsSearch { BottomLibrarySearch().padding(.horizontal).background(.bar) }
+            }
+        }
+    }
+    private var tabs: some View {
         @Bindable var router = router
-        TabView(selection: $router.selectedTab) {
-            tab(.watch) { VideoListScreen { container.makeVideoListViewModel() } }
-                .tabItem { Label(String(localized: "stream_watch"), systemImage: "play.rectangle.fill") }.tag(AppTab.watch)
-            tab(.search) { SearchScreen { container.makeSearchViewModel() } }
-                .tabItem { Label(String(localized: "video_list_search"), systemImage: "magnifyingglass") }.tag(AppTab.search)
-            tab(.library) { StreamingLibraryView() }
-                .tabItem { Label(String(localized: "stream_library"), systemImage: "rectangle.stack.fill") }.tag(AppTab.library)
+        return TabView(selection: $router.selectedTab) {
+            tab(.library) {
+                LibraryRootScreen(makeVideos: { container.makeVideoListViewModel() }, makeSearch: { container.makeSearchViewModel() })
+            }
+            .tabItem { Label(String(localized: "stream_library"), systemImage: "play.rectangle.fill") }.tag(AppTab.library)
             tab(.downloads) {
                 OfflineDownloadsView(videoRepository: container.videoRepository, playbackSettings: container.sponsorBlockSettings)
             }
             .tabItem { Label(String(localized: "offline_title"), systemImage: "arrow.down.circle.fill") }.tag(AppTab.downloads)
+            tab(.queue) { DownloadQueueScreen { container.makeDownloadQueueViewModel() } }
+                .tabItem { Label(String(localized: "nav_queue"), systemImage: "server.rack") }.tag(AppTab.queue)
         }
     }
 
+    private var showsSearch: Bool { router.path.isEmpty && !router.isPrivatePlayerVisible && !(router.selectedTab == .library && router.isLibrarySearchActive) }
+    private var usesLegacySearch: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        ProcessInfo.processInfo.arguments.contains("--navigation-legacy-search")
+        #else
+        false
+        #endif
+    }
+    private func isPlayer(_ route: Route) -> Bool {
+        if case .videoDetail = route { return true }
+        return false
+    }
     private func tab<Content: View>(_ tab: AppTab, @ViewBuilder content: () -> Content) -> some View {
         NavigationStack(path: Binding(get: { router.path(for: tab) }, set: { router.setPath($0, for: tab) })) {
             content().navigationDestination(for: Route.self) { route in
-                destination(route).toolbar(.hidden, for: .tabBar)
+                destination(route).toolbar(isPlayer(route) ? .hidden : .visible, for: .tabBar)
             }
         }
     }
