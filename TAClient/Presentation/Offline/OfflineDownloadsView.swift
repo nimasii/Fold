@@ -9,9 +9,10 @@ struct OfflineDownloadsView: View {
     @State private var playing: OfflineRecord?
     @State private var removing: OfflineRecord?
     @State private var showInfo = false
+    @State private var filter = OfflineListFilter.all
 
-    private var completed: [OfflineRecord] { library.records.filter { $0.status == .ready } }
-    private var transfers: [OfflineRecord] { library.records.filter { $0.status != .ready } }
+    private var completed: [OfflineRecord] { filter == .transfers ? [] : library.records.filter { $0.status == .ready } }
+    private var transfers: [OfflineRecord] { filter == .ready ? [] : library.records.filter { $0.status != .ready } }
 
     var body: some View {
         ScrollView {
@@ -23,6 +24,9 @@ struct OfflineDownloadsView: View {
                 if library.records.isEmpty {
                     ContentUnavailableView(String(localized: "offline_empty"), systemImage: "arrow.down.circle",
                         description: Text(String(localized: "offline_empty_help")))
+                }
+                if !library.records.isEmpty && completed.isEmpty && transfers.isEmpty {
+                    ContentUnavailableView(String(localized: "nav_no_matching_downloads"), systemImage: "line.3.horizontal.decrease.circle")
                 }
                 if !completed.isEmpty {
                     MediaSectionHeading(title: String(localized: "stream_ready"))
@@ -54,11 +58,21 @@ struct OfflineDownloadsView: View {
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button { showInfo = true } label: { Image(systemName: "info.circle") }
-                    .accessibilityLabel(String(localized: "offline_info"))
+                SectionMenu {
+                    ForEach(OfflineListFilter.allCases, id: \.self) { option in
+                        Button { filter = option } label: {
+                            if filter == option { Label(option.label, systemImage: "checkmark") }
+                            else { Text(option.label) }
+                        }.accessibilityIdentifier("downloads.filter." + option.rawValue)
+                    }
+                }
             }
         }
-        .navigationDestination(item: $playing) { record in OfflinePlayerScreen(record: record, library: library, authState: authState, router: router, settings: playbackSettings) }
+        .navigationDestination(item: $playing) { record in
+            OfflinePlayerScreen(record: record, library: library, authState: authState, router: router, settings: playbackSettings)
+                .toolbar(.hidden, for: .tabBar)
+        }
+        .onChange(of: playing?.id) { router.isPrivatePlayerVisible = playing != nil }
         .confirmationDialog(String(localized: "offline_remove_title"), isPresented: Binding(
             get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
             Button(String(localized: "offline_remove"), role: .destructive) {
@@ -99,7 +113,11 @@ struct OfflineDownloadsView: View {
                 Text(library.totalSize).font(.subheadline).foregroundStyle(.secondary)
             }
             Text(String(localized: "offline_private_help")).font(.footnote).foregroundStyle(.secondary)
-            LibraryDestination(title: String(localized: "stream_server_queue"), detail: String(localized: "stream_server_queue_help"), symbol: "server.rack", route: .downloadQueue)
+            Button { showInfo = true } label: {
+                Label(String(localized: "offline_info"), systemImage: "info.circle")
+            }.font(.subheadline).frame(minHeight: 44)
+                .accessibilityLabel(String(localized: "offline_info"))
+                .accessibilityIdentifier("downloads.info")
             Divider()
         }.padding(.horizontal, StreamingStyle.gutter)
     }
@@ -145,4 +163,15 @@ struct OfflinePlayerScreen: View {
     }
 
     var body: some View { VideoDetailView(viewModel: viewModel) }
+}
+
+private enum OfflineListFilter: String, CaseIterable {
+    case all, ready, transfers
+    var label: String {
+        switch self {
+        case .all: String(localized: "filter_all")
+        case .ready: String(localized: "stream_ready")
+        case .transfers: String(localized: "stream_transfers")
+        }
+    }
 }

@@ -12,6 +12,7 @@ final class ServerConnectionUITests: XCTestCase {
         attach(app, "01-connection-setup")
         server.tap()
         server.typeText("http://127.0.0.1:18079")
+        if app.buttons["Done"].firstMatch.isHittable { app.buttons["Done"].firstMatch.tap() }
         app.buttons["connection.sign-in"].tap()
         let finish = app.buttons["Finish"]
         XCTAssertTrue(finish.waitForExistence(timeout: 10))
@@ -30,8 +31,12 @@ final class ServerConnectionUITests: XCTestCase {
         XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 10))
         attach(app, "04-connected-fixture")
         app.buttons["More"].tap()
-        app.buttons["Log Out"].tap()
-        app.buttons.matching(identifier: "Log Out").allElementsBoundByIndex.last!.tap()
+        app.buttons["section.settings"].tap()
+        let logout = app.buttons["settings.logout"]
+        for _ in 0..<6 where !logout.isHittable { app.swipeUp() }
+        logout.tap()
+        XCTAssertTrue(app.sheets.buttons["Log Out"].waitForExistence(timeout: 5))
+        app.sheets.buttons["Log Out"].tap()
         XCTAssertTrue(app.buttons["connection.sign-in"].waitForExistence(timeout: 10))
     }
 

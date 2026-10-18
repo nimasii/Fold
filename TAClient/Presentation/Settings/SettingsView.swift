@@ -4,6 +4,7 @@ struct SettingsView: View {
     @Bindable var viewModel: SettingsViewModel
     @Environment(AppRouter.self) private var router
     @Environment(AuthState.self) private var authState
+    @State private var showLogoutConfirmation = false
 
     var body: some View {
         Form {
@@ -64,6 +65,15 @@ struct SettingsView: View {
                 Text(String(localized: "settings_player"))
             }
 
+            if authState.isAuthenticated {
+                Section {
+                    Button(String(localized: "video_list_logout"), systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                        showLogoutConfirmation = true
+                    }
+                    .accessibilityLabel(String(localized: "video_list_logout"))
+                    .accessibilityIdentifier("settings.logout")
+                }
+            }
             Section {
                 Button {
                     router.navigate(to: .about)
@@ -78,6 +88,10 @@ struct SettingsView: View {
                 }
                 .accessibilityLabel(String(localized: "settings_about"))
             }
+        }
+        .confirmationDialog(String(localized: "video_list_logout"), isPresented: $showLogoutConfirmation, titleVisibility: .visible) {
+            Button(String(localized: "video_list_logout"), role: .destructive) { router.handleUnauthorized() }
+            Button(String(localized: "cancel"), role: .cancel) {}
         }
         .formStyle(.grouped)
         .navigationTitle(String(localized: "settings_title"))

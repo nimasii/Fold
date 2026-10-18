@@ -2,8 +2,20 @@ import SwiftUI
 
 struct SearchView: View {
     @Bindable var viewModel: SearchViewModel
+    var embeddedInLibrary = false
 
-    var body: some View {
+    @ViewBuilder var body: some View {
+        if embeddedInLibrary {
+            content
+        } else {
+            content.searchable(text: $viewModel.query,
+                placement: .navigationBarDrawer(displayMode: .always),
+                prompt: Text(String(localized: "search_archive_prompt")))
+                .onSubmit(of: .search) { viewModel.submitSearch() }
+                .onChange(of: viewModel.query) { viewModel.onQueryChanged() }
+        }
+    }
+    private var content: some View {
         VStack(spacing: 0) {
             if !viewModel.videos.isEmpty {
                 HStack {
@@ -19,16 +31,12 @@ struct SearchView: View {
             }
             results
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(StreamingStyle.background)
-        .searchable(text: $viewModel.query,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: Text(String(localized: "search_archive_prompt")))
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
-        .onSubmit(of: .search) { viewModel.submitSearch() }
-        .onChange(of: viewModel.query) { viewModel.onQueryChanged() }
         .onChange(of: viewModel.router.deletedVideoIds) { viewModel.removeDeletedVideos() }
-        .navigationTitle(String(localized: "video_list_search"))
+        .navigationTitle(String(localized: embeddedInLibrary ? "stream_library" : "video_list_search"))
         .navigationBarTitleDisplayMode(.large)
     }
 

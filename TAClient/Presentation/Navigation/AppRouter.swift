@@ -7,12 +7,30 @@ enum AppState {
 }
 
 enum AppTab: Int, CaseIterable {
-    case watch, search, library, downloads
+    case library, downloads, queue
 }
 
 @Observable
 final class AppRouter {
-    var selectedTab: AppTab = .watch
+    var selectedTab: AppTab = .library
+    var isPrivatePlayerVisible = false
+    var librarySearchQuery = ""
+    var isLibrarySearchActive = false
+    var librarySearchWantsFocus = false
+
+    /// Search is an explicit trip to the Library root, not a fourth section.
+    /// Ordinary tab switches keep all three independent back stacks intact.
+    func beginLibrarySearch() {
+        librarySearchWantsFocus = true
+        if selectedTab != .library { selectedTab = .library }
+        if !path(for: .library).isEmpty { tabPaths[.library] = NavigationPath() }
+        isLibrarySearchActive = true
+    }
+    func cancelLibrarySearch() {
+        librarySearchQuery = ""
+        isLibrarySearchActive = false
+        librarySearchWantsFocus = false
+    }
     private var tabPaths: [AppTab: NavigationPath] = [:]
     private var entryPath = NavigationPath()
     var path: NavigationPath {
@@ -28,7 +46,9 @@ final class AppRouter {
     private func resetNavigation() {
         entryPath = NavigationPath()
         tabPaths.removeAll()
-        selectedTab = .watch
+        selectedTab = .library
+        cancelLibrarySearch()
+        isPrivatePlayerVisible = false
     }
     var appState: AppState
     private(set) var deletedVideoIds: Set<String> = []

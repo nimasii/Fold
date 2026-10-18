@@ -3,6 +3,7 @@ import SwiftUI
 struct DownloadQueueView: View {
     @State var viewModel: DownloadQueueViewModel
     @State private var pendingDeletion: DownloadItem?
+    @FocusState private var isAddingFocused: Bool
     @Environment(AuthState.self) private var authState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -29,12 +30,12 @@ struct DownloadQueueView: View {
                                     Task { await viewModel.loadMoreIfNeeded() }
                                 }
                             }
-                            .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button {
                                     pendingDeletion = item
                                 } label: {
                                     Label(String(localized: "download_action_delete"), systemImage: "trash")
-                                }
+                                }.tint(.red)
 
                                 if viewModel.filter == "pending" {
                                     Button {
@@ -84,7 +85,7 @@ struct DownloadQueueView: View {
         // The filter remains stable while progress and error content change below it.
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
-                filterPicker.padding(.horizontal, StreamingStyle.gutter).padding(.vertical, 8)
+                queueControls.padding(.horizontal, StreamingStyle.gutter).padding(.vertical, 8)
                 if !viewModel.downloadProgress.isEmpty {
                     VStack(spacing: 6) {
                         ForEach(viewModel.downloadProgress, id: \.id) { info in
@@ -128,11 +129,14 @@ struct DownloadQueueView: View {
                         Image(systemName: "link").foregroundStyle(.secondary).accessibilityHidden(true)
                         TextField(String(localized: "download_add_placeholder"), text: Bindable(viewModel).addInput)
                             .textFieldStyle(.plain)
+                            .focused($isAddingFocused)
                             .accessibilityLabel(String(localized: "download_add_placeholder"))
+                            .accessibilityIdentifier("queue.add-input")
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .submitLabel(.done)
                             .onSubmit {
+                                isAddingFocused = false
                                 Task { await viewModel.addToQueue() }
                             }
                     }
@@ -141,6 +145,7 @@ struct DownloadQueueView: View {
                     .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
 
                     Button {
+                        isAddingFocused = false
                         Task { await viewModel.addToQueue() }
                     } label: {
                         if viewModel.isAdding {
@@ -153,6 +158,7 @@ struct DownloadQueueView: View {
                     .controlSize(.large)
                     .buttonBorderShape(.capsule)
                     .accessibilityLabel(String(localized: "download_add_button"))
+                    .accessibilityIdentifier("queue.add")
                     .disabled(viewModel.addInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isAdding)
                 }
                 .padding(.horizontal)
@@ -169,47 +175,20 @@ struct DownloadQueueView: View {
             Button(String(localized: "cancel"), role: .cancel) { pendingDeletion = nil }
         } message: { if let item = pendingDeletion { Text(item.title) } }
         .background(StreamingStyle.background)
-        .navigationTitle(String(localized: "stream_server_queue"))
-        .navigationBarTitleDisplayMode(.large)
+        .navigationTitle(String(localized: "nav_queue"))
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                if viewModel.downloadProgress.contains(where: { $0.canStop }) {
-                    Button {
-                        Task { await viewModel.stopCurrentDownload() }
-                    } label: {
-                        Label(String(localized: "download_stop_button"), systemImage: "stop.fill")
-                    }
-                    .tint(.red)
-                } else {
-                    Button {
-                        Task { await viewModel.startDownload() }
-                    } label: {
-                        if viewModel.isStartingDownload {
-                            ProgressView()
-                        } else {
-                            Label(String(localized: "download_start_button"), systemImage: "arrow.down.circle.fill")
-                        }
-                    }
-                    .disabled(viewModel.isStartingDownload || viewModel.filter != "pending" || viewModel.items.isEmpty)
-                }
-            }
             ToolbarItem(placement: .topBarTrailing) {
-                if authState.isPrivileged {
-                    Button {
-                        Task { await viewModel.rescanSubscriptions() }
-                    } label: {
-                        if viewModel.isRescanningSubscriptions {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
+                SectionMenu {
+                    ForEach(["pending", "ignore"], id: \.self) { filter in
+                        Button { viewModel.filter = filter } label: {
+                            let label = String(localized: filter == "pending" ? "download_filter_pending" : "download_filter_ignore")
+                            if viewModel.filter == filter { Label(label, systemImage: "checkmark") }
+                            else { Text(label) }
+                        }.accessibilityIdentifier("queue.filter." + filter)
                     }
-                    .disabled(viewModel.isRescanningSubscriptions)
-                    .accessibilityLabel(String(localized: "download_rescan_button"))
                 }
             }
-
         }
         .task {
             if viewModel.items.isEmpty {
@@ -218,6 +197,7 @@ struct DownloadQueueView: View {
             await viewModel.checkNotifications()
         }
         .onDisappear {
+            isAddingFocused = false
             viewModel.stopPolling()
         }
         .onChange(of: viewModel.filter) {
@@ -225,15 +205,35 @@ struct DownloadQueueView: View {
         }
     }
 
-    private var filterPicker: some View {
-        Picker(String(localized: "download_queue_title"), selection: Bindable(viewModel).filter) {
-            Text(String(localized: "download_filter_pending")).tag("pending")
-            Text(String(localized: "download_filter_ignore")).tag("ignore")
+    private var queueControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: viewModel.filter == "pending" ? "download_filter_pending" : "download_filter_ignore"))
+                .font(.headline).accessibilityAddTraits(.isHeader)
+            HStack(spacing: 12) {
+                if viewModel.downloadProgress.contains(where: { $0.canStop }) {
+                    Button { Task { await viewModel.stopCurrentDownload() } } label: {
+                        Label(String(localized: "download_stop_button"), systemImage: "stop.fill")
+                    }.tint(.red).accessibilityLabel(String(localized: "download_stop_button")).frame(minHeight: 44)
+                } else {
+                    Button { Task { await viewModel.startDownload() } } label: {
+                        Label(String(localized: "download_start_button"), systemImage: "arrow.down.circle.fill")
+                    }
+                    .disabled(viewModel.isStartingDownload || viewModel.filter != "pending" || viewModel.items.isEmpty)
+                    .accessibilityLabel(String(localized: "download_start_button"))
+                    .accessibilityIdentifier("queue.start").frame(minHeight: 44)
+                }
+                Spacer(minLength: 0)
+                if authState.isPrivileged {
+                    Button { Task { await viewModel.rescanSubscriptions() } } label: {
+                        Label(String(localized: "download_rescan_button"), systemImage: "arrow.triangle.2.circlepath")
+                    }.disabled(viewModel.isRescanningSubscriptions)
+                        .accessibilityLabel(String(localized: "download_rescan_button"))
+                        .accessibilityIdentifier("queue.rescan").frame(minHeight: 44)
+                }
+            }.buttonStyle(.bordered).controlSize(.regular)
         }
-        .pickerStyle(.segmented)
-        .frame(maxWidth: .infinity, minHeight: 44)
-        .accessibilityLabel(String(localized: "stream_server_queue"))
     }
+
 }
 
 private struct DownloadItemRow: View {
