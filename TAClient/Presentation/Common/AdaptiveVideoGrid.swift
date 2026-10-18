@@ -22,6 +22,8 @@ struct AdaptiveVideoGrid: View {
     var onRemoveLocalCopy: ((String) -> Void)? = nil
     var onRefreshLocalDetails: ((String) -> Void)? = nil
     var refreshableLocalIDs: Set<String> = []
+    var onPrepareLocalArtwork: ((String) async -> Void)? = nil
+    var artworkRequestRevision = ""
 
     var isSelecting: Bool = false
     var selectedIds: Set<String> = []
@@ -83,6 +85,7 @@ struct AdaptiveVideoGrid: View {
                             }
                         }
                     }
+                    .task(id: artworkRequestRevision) { await onPrepareLocalArtwork?(video.id) }
                     .onAppear {
                         if nearEnd.contains(video.id) {
                             onNearEnd?()

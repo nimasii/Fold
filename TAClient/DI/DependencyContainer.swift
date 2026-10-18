@@ -42,8 +42,22 @@ final class DependencyContainer {
             let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("StreamingDesignFixture-v1", isDirectory: true)
             if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-reset") { try? FileManager.default.removeItem(at: root) }
+            if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-legacy-artwork") || ProcessInfo.processInfo.arguments.contains("--streaming-fixture-corrupt-artwork"),
+               let store = try? OfflineDiskStore(root: root), var copies = try? store.load() {
+                for index in copies.indices where copies[index].status == .ready {
+                    if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-legacy-artwork") { copies[index].metadata = nil }
+                    for kind in ["thumbnail", "channel"] {
+                        let file = root.appendingPathComponent("Artwork/" + copies[index].id.uuidString + "-" + kind + ".jpg")
+                        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-corrupt-artwork") {
+                            try? Data("corrupt fixture".utf8).write(to: file, options: .atomic)
+                        } else { try? FileManager.default.removeItem(at: file) }
+                    }
+                }
+                try? store.save(copies)
+            }
             offlineLibrary = OfflineLibrary(authState: authState, root: root)
             router.onLoginSuccess()
+            if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-downloads") { router.selectedTab = .downloads }
             if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-login") { router.appState = .login }
             return
         }

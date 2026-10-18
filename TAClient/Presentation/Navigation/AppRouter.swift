@@ -17,26 +17,36 @@ final class AppRouter {
     var librarySearchQuery = ""
     var isLibrarySearchActive = false
     var librarySearchWantsFocus = false
+    var librarySearchPath = NavigationPath()
+    private(set) var searchReturnTab: AppTab = .library
 
-    /// Search is an explicit trip to the Library root, not a fourth section.
-    /// Ordinary tab switches keep all three independent back stacks intact.
+    /// Search is transient Library context, with its own history. Cancel returns
+    /// to the originating section without discarding any section's navigation.
     func beginLibrarySearch() {
+        if !isLibrarySearchActive { searchReturnTab = selectedTab }
         librarySearchWantsFocus = true
-        if selectedTab != .library { selectedTab = .library }
-        if !path(for: .library).isEmpty { tabPaths[.library] = NavigationPath() }
+        selectedTab = .library
         isLibrarySearchActive = true
     }
-    func cancelLibrarySearch() {
+    func cancelLibrarySearch(returnToOrigin: Bool = true) {
+        if returnToOrigin && isLibrarySearchActive { selectedTab = searchReturnTab }
         librarySearchQuery = ""
         isLibrarySearchActive = false
         librarySearchWantsFocus = false
+        librarySearchPath = NavigationPath()
     }
     private var tabPaths: [AppTab: NavigationPath] = [:]
     private var entryPath = NavigationPath()
     var path: NavigationPath {
-        get { appState == .authenticated ? path(for: selectedTab) : entryPath }
+        get {
+            if appState != .authenticated { return entryPath }
+            return isLibrarySearchActive ? librarySearchPath : path(for: selectedTab)
+        }
         set {
-            if appState == .authenticated { tabPaths[selectedTab] = newValue }
+            if appState == .authenticated {
+                if isLibrarySearchActive { librarySearchPath = newValue }
+                else { tabPaths[selectedTab] = newValue }
+            }
             else { entryPath = newValue }
         }
     }
@@ -47,7 +57,8 @@ final class AppRouter {
         entryPath = NavigationPath()
         tabPaths.removeAll()
         selectedTab = .library
-        cancelLibrarySearch()
+        cancelLibrarySearch(returnToOrigin: false)
+        searchReturnTab = .library
         isPrivatePlayerVisible = false
     }
     var appState: AppState

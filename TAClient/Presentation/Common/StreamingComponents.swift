@@ -108,36 +108,122 @@ struct StreamingTabs<Destination: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(DependencyContainer.self) private var container
     @Environment(AppRouter.self) private var router
+    @State private var searchPresented = false
+    @State private var legacyPlayerVisible = false
     @ViewBuilder let destination: (Route) -> Destination
 
     @ViewBuilder var body: some View {
-        // Large discovery content can intercept native accessory taps on compact
-        // screens. Accessibility sizes use the keyboard-safe inset placement.
-        if #available(iOS 26.1, *), !usesLegacySearch, !dynamicTypeSize.isAccessibilitySize {
-            tabs.tabViewBottomAccessory(isEnabled: showsSearch) { BottomLibrarySearch() }
-        } else {
-            tabs.safeAreaInset(edge: .bottom, spacing: 0) {
-                if showsSearch { BottomLibrarySearch().padding(.horizontal).background(.bar) }
+        if #available(iOS 26, *), !usesLegacySearch { nativeTabs }
+        else { legacyShell }
+    }
+
+    /// Search is the native trailing affordance, not another primary section.
+    @available(iOS 26, *)
+    private var nativeTabs: some View {
+        @Bindable var router = router
+        return TabView(selection: Binding(
+            get: { router.isLibrarySearchActive ? ShellSelection.search : .section(router.selectedTab) },
+            set: { selection in
+                switch selection {
+                case .search:
+                    router.beginLibrarySearch()
+                    searchPresented = true
+                case .section(let section):
+                    router.cancelLibrarySearch(returnToOrigin: false)
+                    router.selectedTab = section
+                    searchPresented = false
+                }
+            }
+        )) {
+            Tab(String(localized: "stream_library"), systemImage: "play.rectangle.fill", value: ShellSelection.section(.library)) {
+                section(.library) { VideoListScreen { container.makeVideoListViewModel() } }
+            }
+            Tab(String(localized: "offline_title"), systemImage: "arrow.down.circle.fill", value: ShellSelection.section(.downloads)) {
+                section(.downloads) { downloads }
+            }
+            Tab(String(localized: "nav_queue"), systemImage: "server.rack", value: ShellSelection.section(.queue)) {
+                section(.queue) { DownloadQueueScreen { container.makeDownloadQueueViewModel() } }
+            }
+            Tab(value: ShellSelection.search, role: .search) {
+                searchNavigation.searchable(text: $router.librarySearchQuery, isPresented: $searchPresented, placement: .toolbar,
+                    prompt: Text(String(localized: "nav_search_library")))
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
             }
         }
-    }
-    private var tabs: some View {
-        @Bindable var router = router
-        return TabView(selection: $router.selectedTab) {
-            tab(.library) {
-                LibraryRootScreen(makeVideos: { container.makeVideoListViewModel() }, makeSearch: { container.makeSearchViewModel() })
+        .tabViewSearchActivation(.searchTabSelection)
+        .onChange(of: searchPresented) { _, presented in
+            if !presented && router.isLibrarySearchActive && router.librarySearchPath.isEmpty {
+                router.cancelLibrarySearch()
             }
-            .tabItem { Label(String(localized: "stream_library"), systemImage: "play.rectangle.fill") }.tag(AppTab.library)
-            tab(.downloads) {
-                OfflineDownloadsView(videoRepository: container.videoRepository, playbackSettings: container.sponsorBlockSettings)
-            }
-            .tabItem { Label(String(localized: "offline_title"), systemImage: "arrow.down.circle.fill") }.tag(AppTab.downloads)
-            tab(.queue) { DownloadQueueScreen { container.makeDownloadQueueViewModel() } }
-                .tabItem { Label(String(localized: "nav_queue"), systemImage: "server.rack") }.tag(AppTab.queue)
+        }
+        .onChange(of: router.isLibrarySearchActive) { _, active in
+            if !active { searchPresented = false }
+        }
+        .onChange(of: router.librarySearchPath.count) { oldCount, count in
+            if count > 0 { searchPresented = false }
+            else if oldCount > 0 && router.isLibrarySearchActive { searchPresented = true }
         }
     }
 
-    private var showsSearch: Bool { router.path.isEmpty && !router.isPrivatePlayerVisible && !(router.selectedTab == .library && router.isLibrarySearchActive) }
+    /// iOS 17–25 has no native inline search tab. Use one system-material row
+    /// of accessible section buttons and search, replaced by the editor on focus.
+    private var legacyShell: some View {
+        @Bindable var router = router
+        return ZStack {
+            TabView(selection: $router.selectedTab) {
+                section(.library, hidesTabs: true) { VideoListScreen { container.makeVideoListViewModel() } }.tag(AppTab.library)
+                section(.downloads, hidesTabs: true) { downloads }.tag(AppTab.downloads)
+                section(.queue, hidesTabs: true) { DownloadQueueScreen { container.makeDownloadQueueViewModel() } }.tag(AppTab.queue)
+            }
+            .toolbar(.hidden, for: .tabBar)
+            .opacity(router.isLibrarySearchActive ? 0 : 1)
+            .accessibilityHidden(router.isLibrarySearchActive)
+            .allowsHitTesting(!router.isLibrarySearchActive)
+            if router.isLibrarySearchActive { searchNavigation }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !isPlayerVisible {
+                if router.isLibrarySearchActive { LibrarySearchEditor() }
+                else {
+                    HStack(spacing: 0) {
+                        ForEach(AppTab.allCases, id: \.self) { tab in
+                            Button { router.selectedTab = tab } label: {
+                                VStack(spacing: 4) {
+                                    Image(systemName: symbol(tab)).font(.body)
+                                    if !dynamicTypeSize.isAccessibilitySize { Text(title(tab)).font(.caption2) }
+                                }.frame(maxWidth: .infinity, minHeight: 48).contentShape(Rectangle())
+                            }
+                            .foregroundStyle(router.selectedTab == tab ? Color.accentColor : .secondary)
+                            .accessibilityLabel(title(tab))
+                            .accessibilityAddTraits(router.selectedTab == tab ? [.isSelected] : [])
+                            .accessibilityIdentifier("section.tab." + String(tab.rawValue))
+                        }
+                        BottomLibrarySearch().frame(width: 52)
+                    }.buttonStyle(.plain).padding(.horizontal, 12).background(.bar)
+                }
+            }
+        }
+        .onChange(of: router.librarySearchPath.count) { _, count in
+            if count > 0 { router.librarySearchWantsFocus = false }
+        }
+    }
+    private var downloads: some View {
+        OfflineDownloadsView(videoRepository: container.videoRepository, playbackSettings: container.sponsorBlockSettings)
+    }
+    private var searchNavigation: some View {
+        @Bindable var router = router
+        return NavigationStack(path: $router.librarySearchPath) {
+            LibrarySearchScreen { container.makeSearchViewModel() }
+                .navigationDestination(for: Route.self) { route in
+                    destination(route).toolbar(isPlayer(route) || usesLegacySearch ? .hidden : .visible, for: .tabBar)
+                        .onAppear { legacyPlayerVisible = isPlayer(route) }
+                        .onDisappear { if isPlayer(route) { legacyPlayerVisible = false } }
+                }
+        }
+    }
+    private var isPlayerVisible: Bool {
+        router.isPrivatePlayerVisible || legacyPlayerVisible || (router.isLibrarySearchActive && !router.librarySearchPath.isEmpty)
+    }
     private var usesLegacySearch: Bool {
         #if DEBUG && targetEnvironment(simulator)
         ProcessInfo.processInfo.arguments.contains("--navigation-legacy-search")
@@ -145,16 +231,37 @@ struct StreamingTabs<Destination: View>: View {
         false
         #endif
     }
+    private func title(_ tab: AppTab) -> String {
+        switch tab {
+        case .library: String(localized: "stream_library")
+        case .downloads: String(localized: "offline_title")
+        case .queue: String(localized: "nav_queue")
+        }
+    }
+    private func symbol(_ tab: AppTab) -> String {
+        switch tab {
+        case .library: "play.rectangle.fill"
+        case .downloads: "arrow.down.circle.fill"
+        case .queue: "server.rack"
+        }
+    }
     private func isPlayer(_ route: Route) -> Bool {
         if case .videoDetail = route { return true }
         return false
     }
-    private func tab<Content: View>(_ tab: AppTab, @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ tab: AppTab, hidesTabs: Bool = false, @ViewBuilder content: () -> Content) -> some View {
         NavigationStack(path: Binding(get: { router.path(for: tab) }, set: { router.setPath($0, for: tab) })) {
-            content().navigationDestination(for: Route.self) { route in
-                destination(route).toolbar(isPlayer(route) ? .hidden : .visible, for: .tabBar)
+            Group {
+                if hidesTabs { content().toolbar(.hidden, for: .tabBar) }
+                else { content() }
             }
+                .navigationDestination(for: Route.self) { route in
+                    destination(route).toolbar(isPlayer(route) || hidesTabs ? .hidden : .visible, for: .tabBar)
+                        .onAppear { legacyPlayerVisible = isPlayer(route) }
+                        .onDisappear { if isPlayer(route) { legacyPlayerVisible = false } }
+                }
         }
     }
+    private enum ShellSelection: Hashable { case section(AppTab), search }
 }
 #endif

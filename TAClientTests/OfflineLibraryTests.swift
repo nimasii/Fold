@@ -402,6 +402,160 @@ extension DataLayerSuite {
             try? FileManager.default.removeItem(at: root)
         }
     }
+    private func repairableCopy(legacy: Bool = true) async throws -> (OfflineLibrary, AuthState, URL, OfflineRecord) {
+        let (original, state, root) = make()
+        var record = try await ready(original)
+        original.pauseAll()
+        record.metadata = legacy ? nil : OfflineVideoMetadata(video: videoWithArtwork("https://example.com/thumbnail.png", channel: "https://example.com/channel.png"), origin: record.origin)
+        try original.disk?.save([record])
+        return (OfflineLibrary(authState: state, root: root, configuration: MockResponse.makeConfiguration()), state, root, record)
+    }
+
+    @Test @MainActor func lazyLegacyArtworkRepairPersistsAcrossSignedOutRelaunchWithoutMediaDownload() async throws {
+        MockResponse.tearDown(); defer { MockResponse.tearDown() }
+        let (library, _, root, record) = try await repairableCopy()
+        defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
+        let media = try #require(library.localURL(for: record)); let before = try Data(contentsOf: media)
+        let data = try artworkData(); let requests = ArtworkRequestLog()
+        MockURLProtocol.requestHandler = { request in
+            requests.append(request.url!)
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil,
+                headerFields: ["Content-Type": "image/png", "Content-Length": String(data.count)])!, data)
+        }
+        let repository = MockVideoRepository(); var reads = 0
+        repository.getVideoHandler = { id in
+            reads += 1
+            #expect(id == record.videoID)
+            return videoWithArtwork("https://example.com/thumbnail.png", channel: "https://example.com/channel.png")
+        }
+        let local = LocalVideoPlayback(record: record, library: library)
+        #expect(local.artworkURL == nil)
+        await library.ensureArtwork(record.id, using: repository)
+        #expect(reads == 1 && requests.urls.count == 2)
+        #expect(Set(requests.urls.map(\.path)) == Set(["/thumbnail.png", "/channel.png"]))
+        #expect(local.artworkURL != nil && local.artwork.channel != nil && local.artwork.revision > 0)
+        #expect(try Data(contentsOf: media) == before)
+        #expect(library.records.first?.status == .ready)
+        let signedOut = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
+        let restored = OfflineLibrary(authState: signedOut, root: root)
+        #expect(UIImage(contentsOfFile: try #require(restored.thumbnailURL(record.id)).path) != nil)
+        #expect(UIImage(contentsOfFile: try #require(restored.channelArtworkURL(record.id)).path) != nil)
+        #expect(try Data(contentsOf: #require(restored.localURL(for: record))) == before)
+        await restored.ensureArtwork(record.id, using: repository)
+        #expect(reads == 1 && requests.urls.count == 2)
+    }
+
+    @Test @MainActor func corruptThumbnailIsRepairedWithoutReplacingGoodAvatarOrVideo() async throws {
+        MockResponse.tearDown(); defer { MockResponse.tearDown() }
+        let (library, _, root, record) = try await repairableCopy(legacy: false)
+        defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
+        let disk = try #require(library.disk); let data = try artworkData()
+        try disk.saveArtwork(data, id: record.id, kind: .thumbnail)
+        try disk.saveArtwork(data, id: record.id, kind: .channel)
+        let thumbnail = try #require(library.thumbnailURL(record.id))
+        let avatar = try #require(library.channelArtworkURL(record.id)); let avatarBefore = try Data(contentsOf: avatar)
+        try Data("corrupt fixture".utf8).write(to: thumbnail, options: .atomic)
+        #expect(library.thumbnailURL(record.id) == nil)
+        let requests = ArtworkRequestLog()
+        MockURLProtocol.requestHandler = { request in
+            requests.append(request.url!)
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!, data)
+        }
+        await library.ensureArtwork(record.id)
+        #expect(requests.urls.map(\.path) == ["/thumbnail.png"])
+        #expect(UIImage(contentsOfFile: try #require(library.thumbnailURL(record.id)).path) != nil)
+        #expect(try Data(contentsOf: avatar) == avatarBefore)
+        #expect(library.localURL(for: record) != nil)
+    }
+
+    @Test @MainActor func failedOptionalArtworkIsThrottledAndForegroundRetryRepairsIt() async throws {
+        MockResponse.tearDown(); defer { MockResponse.tearDown() }
+        let (library, _, root, record) = try await repairableCopy(legacy: false)
+        defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
+        let requests = ArtworkRequestLog(); let data = try artworkData()
+        MockURLProtocol.requestHandler = { request in
+            requests.append(request.url!)
+            return (HTTPURLResponse(url: request.url!, statusCode: 503, httpVersion: nil, headerFields: [:])!, Data())
+        }
+        await library.ensureArtwork(record.id)
+        await library.ensureArtwork(record.id)
+        #expect(requests.urls.count == 2)
+        #expect(library.thumbnailURL(record.id) == nil && library.storageError == nil)
+        #expect(library.records.first?.status == .ready)
+        MockURLProtocol.requestHandler = { request in
+            requests.append(request.url!)
+            return (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!, data)
+        }
+        library.retryArtworkOnAppearance()
+        await library.ensureArtwork(record.id)
+        await library.ensureArtwork(record.id)
+        #expect(requests.urls.count == 4)
+        #expect(library.thumbnailURL(record.id) != nil && library.channelArtworkURL(record.id) != nil)
+        #expect(library.localURL(for: record) != nil)
+    }
+
+    @Test @MainActor func legacyRepairRejectsDifferentServerAndRevokedMetadataResponse() async throws {
+        MockResponse.tearDown(); defer { MockResponse.tearDown() }
+        let (library, state, root, record) = try await repairableCopy()
+        defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
+        let repository = MockVideoRepository(); var reads = 0
+        repository.getVideoHandler = { _ in
+            reads += 1; state.handleUnauthorized()
+            return videoWithArtwork("https://example.com/thumbnail.png")
+        }
+        try state.setExistingToken("OTHER_FIXTURE", serverURL: URL(string: "https://other.example")!)
+        await library.ensureArtwork(record.id, using: repository)
+        #expect(reads == 0 && MockURLProtocol.lastRequest == nil)
+        try state.setExistingToken("DUMMY_AUTH_SECRET", serverURL: base)
+        library.authorizationChanged()
+        await library.ensureArtwork(record.id, using: repository)
+        #expect(reads == 1 && library.records.first?.metadata == nil)
+        #expect(library.thumbnailURL(record.id) == nil && library.localURL(for: record) != nil)
+    }
+
+    @Test @MainActor func connectionSwitchDuringArtworkFetchCannotCommitLatePixels() async throws {
+        MockResponse.tearDown(); defer { MockResponse.tearDown() }
+        let (library, state, root, record) = try await repairableCopy(legacy: false)
+        defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
+        let data = try artworkData()
+        MockURLProtocol.delayedHandler = { request in
+            (HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: [:])!, data, 0.2)
+        }
+        let task = Task { await library.ensureArtwork(record.id) }
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while MockURLProtocol.lastRequest == nil && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(MockURLProtocol.lastRequest != nil)
+        try state.setExistingToken("OTHER_FIXTURE", serverURL: URL(string: "https://other.example")!)
+        library.authorizationChanged()
+        await task.value
+        #expect(library.thumbnailURL(record.id) == nil && library.channelArtworkURL(record.id) == nil)
+        #expect(library.localURL(for: record) != nil)
+    }
+
+    @Test @MainActor func savedArtworkPathsRejectTraversalAndSymlinkFiles() async throws {
+        let origin = RequestAuthorization.origin(base)
+        for path in ["//evil.example/a.jpg", "/../a.jpg", "/%2e%2e/a.jpg", "/%252e%252e/a.jpg", "/%25252e%25252e/a.jpg", "/%2f%2fevil/a.jpg", "/a.jpg?token=fixture", "/a.jpg#fragment", "/a\\b.jpg", "/a%00.jpg"] {
+            #expect(OfflineVideoMetadata.artworkURL(path: path, origin: origin) == nil)
+        }
+        #expect(OfflineVideoMetadata.artworkURL(path: "/cache/videos/abc.jpg", origin: origin) != nil)
+        let (library, _, root, record) = try await repairableCopy(legacy: false)
+        defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
+        let outside = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".png")
+        defer { try? FileManager.default.removeItem(at: outside) }
+        let data = try artworkData(); try data.write(to: outside)
+        let link = root.appendingPathComponent("Artwork/" + record.id.uuidString + "-thumbnail.jpg")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        #expect(library.thumbnailURL(record.id) == nil)
+        #expect(throws: OfflineFailure.self) { try library.disk?.saveArtwork(data, id: record.id, kind: .thumbnail) }
+        #expect(try Data(contentsOf: outside) == data)
+    }
 
 }
+}
+
+nonisolated private final class ArtworkRequestLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [URL] = []
+    func append(_ url: URL) { lock.withLock { storage.append(url) } }
+    var urls: [URL] { lock.withLock { storage } }
 }

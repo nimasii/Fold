@@ -1,5 +1,7 @@
 # Three sections and bottom Library search
 
+This records PR9 validation. The current [inline-search and artwork refinement](inline-search-artwork.md) supersedes its stacked-accessory search placement and search-history behavior.
+
 The primary navigation is exactly **Library**, **Downloads** and **Queue**. Library combines the archive discovery/video grid with a contextual Playlists entry. Downloads contains private local copies; Queue contains pending and ignored server work. Root menus contain Settings and supported filters only. Search is a Library context rather than a fourth section.
 
 On iOS26.1 and later the shell uses SwiftUI's native `tabViewBottomAccessory`. A search control opens Library search. During editing the tabs/accessory yield to a keyboard-aware bottom safe-area search bar, so the query and Cancel remain visible above the keyboard. UIKit owns editing and clear; a sibling native Cancel remains enabled after Return. Older supported systems and accessibility text sizes use bottom safe-area placement. This keeps the control tappable when large discovery content overlaps the native tab accessory on compact screens. The compact control has an explicit Library scope, routes there from another primary section, and clears on Cancel. Starting a search intentionally goes to the Library root; ordinary tab changes preserve all three independent back stacks. A Library search does not discard Downloads or Queue history. Searches use the existing debounced repository and stale-result guard; no API behavior or authentication is added.

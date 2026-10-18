@@ -36,8 +36,34 @@ nonisolated struct OfflineVideoMetadata: Codable, Hashable {
     private static func artworkPath(_ raw: String?, origin: String) -> String? {
         guard let raw, let url = URL(string: raw), RequestAuthorization.origin(url) == origin,
               url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return nil }
-        return URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath
+        guard let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath,
+              artworkURL(path: path, origin: origin) != nil else { return nil }
+        return path
     }
+    /// Revalidate persisted paths as well as fresh server responses. No URL,
+    /// query, traversal segment or encoded separator may escape the saved origin.
+    static func artworkURL(path: String, origin: String) -> URL? {
+        guard path.hasPrefix("/"), !path.hasPrefix("//"),
+              !path.contains("\\"), !path.contains("?"), !path.contains("#") else { return nil }
+        var decoded = path
+        for _ in 0..<3 {
+            guard !decoded.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+                  !decoded.contains("\\"), !decoded.hasPrefix("//"),
+                  !decoded.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0 == "." || $0 == ".." }) else { return nil }
+            guard let next = decoded.removingPercentEncoding else { return nil }
+            if next == decoded { break }
+            // Encoded separators can change a path after the server decodes it.
+            guard next.filter({ $0 == "/" }).count == decoded.filter({ $0 == "/" }).count else { return nil }
+            decoded = next
+        }
+        guard !decoded.contains("%"), !decoded.contains("\\"),
+              !decoded.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+              !decoded.split(separator: "/", omittingEmptySubsequences: false).contains(where: { $0 == "." || $0 == ".." }),
+              let url = URL(string: origin + path), RequestAuthorization.origin(url) == origin,
+              url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return nil }
+        return url
+    }
+
 }
 
 extension OfflineRecord {
