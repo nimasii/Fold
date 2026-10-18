@@ -10,9 +10,6 @@ struct LibrarySearchScreen: View {
             .toolbar { ToolbarItem(placement: .topBarTrailing) { SectionMenu(hasFilters: false) { EmptyView() } } }
             .onChange(of: router.librarySearchQuery) { syncQuery() }
             .onAppear { syncQuery() }
-            .onDisappear {
-                if !router.isLibrarySearchActive { viewModel.query = ""; viewModel.onQueryChanged() }
-            }
             .onSubmit(of: .search) { viewModel.submitSearch() }
     }
     private func syncQuery() {
