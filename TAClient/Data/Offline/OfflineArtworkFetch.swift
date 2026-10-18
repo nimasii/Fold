@@ -26,3 +26,18 @@ enum OfflineArtworkFetch {
         } onCancel: { stream.cancelUpstream() }
     }
 }
+
+/// Two visible copies may repair artwork concurrently; a large archive cannot
+/// start one independent network connection for every grid item at once.
+actor OfflineArtworkLimiter {
+    private var active = 0
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    func acquire() async {
+        if active < 2 { active += 1; return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+    func release() {
+        if waiting.isEmpty { active -= 1 }
+        else { waiting.removeFirst().resume() }
+    }
+}

@@ -110,12 +110,18 @@ struct AppRouterTests {
         #expect(router.selectedTab == .library)
         #expect(router.path.isEmpty)
         #expect(router.isLibrarySearchActive)
+        #expect(router.path(for: .library).count == 1)
         #expect(router.path(for: .downloads).count == 1)
         #expect(router.path(for: .queue).count == 1)
+        router.navigate(to: .videoDetail(videoId: "found"))
+        #expect(router.librarySearchPath.count == 1)
+        #expect(router.path(for: .library).count == 1)
         router.librarySearchQuery = "Earth"
         router.cancelLibrarySearch()
         #expect(router.librarySearchQuery.isEmpty)
         #expect(!router.isLibrarySearchActive)
+        #expect(router.selectedTab == .queue)
+        #expect(router.librarySearchPath.isEmpty)
         router.beginLibrarySearch()
         router.librarySearchQuery = "Moon"
         router.handleUnauthorized()

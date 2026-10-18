@@ -6,28 +6,24 @@ struct BottomLibrarySearch: View {
     @Environment(AppRouter.self) private var router
     var body: some View {
         Button { router.beginLibrarySearch() } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                Text(String(localized: "nav_search_library"))
-                Spacer(minLength: 0)
-            }
-            .font(.body).foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, minHeight: 44).contentShape(Rectangle())
+            Image(systemName: "magnifyingglass")
+                .font(.body).frame(maxWidth: .infinity, minHeight: 48)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain).padding(.horizontal, 16).padding(.vertical, 2)
+        .buttonStyle(.plain)
         .accessibilityLabel(String(localized: "nav_search_library"))
         .accessibilityIdentifier("library.search.open")
     }
 }
 
-/// Editing is anchored to the Library's keyboard-aware safe area. Tab accessories
-/// are hidden with the tab bar by iOS when the keyboard appears.
+/// The older-OS fallback replaces its one navigation row with this editor,
+/// anchored to the keyboard-aware safe area. iOS 26 uses native search instead.
 struct LibrarySearchEditor: View {
     @Environment(AppRouter.self) private var router
     var body: some View {
         @Bindable var router = router
         LibrarySearchBar(query: $router.librarySearchQuery, wantsFocus: $router.librarySearchWantsFocus,
-            onBegin: router.beginLibrarySearch, onCancel: router.cancelLibrarySearch)
+            onBegin: router.beginLibrarySearch, onCancel: { router.cancelLibrarySearch() })
             .background(.bar)
     }
 }

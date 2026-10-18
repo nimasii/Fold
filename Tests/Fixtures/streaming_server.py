@@ -10,7 +10,7 @@ import re
 
 root = Path(__file__).parent
 lock = Lock()
-state = {'offline': False, 'mediaRequests': 0, 'rangeRequests': 0, 'unauthorized': 0}
+state = {'offline': False, 'mediaRequests': 0, 'rangeRequests': 0, 'unauthorized': 0, 'artRequests': 0}
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_): pass
     def send(self, code, data=b'', **headers):
@@ -37,6 +37,7 @@ class Handler(BaseHTTPRequestHandler):
         with lock:
             offline = state['offline']
             if path == '/media.mp4': state['mediaRequests'] += 1
+            elif art: state['artRequests'] += 1
         if offline: return self.send(503)
         if self.headers.get('Authorization') != 'Token STREAMING_FIXTURE_TOKEN':
             with lock: state['unauthorized'] += 1

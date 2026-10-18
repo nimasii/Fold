@@ -10,6 +10,8 @@ struct OfflineDownloadsView: View {
     @State private var removing: OfflineRecord?
     @State private var showInfo = false
     @State private var filter = OfflineListFilter.all
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var artworkRequestRevision = 0
 
     private var completed: [OfflineRecord] { filter == .transfers ? [] : library.records.filter { $0.status == .ready } }
     private var transfers: [OfflineRecord] { filter == .ready ? [] : library.records.filter { $0.status != .ready } }
@@ -42,7 +44,12 @@ struct OfflineDownloadsView: View {
                             guard let record = completed.first(where: { $0.id.uuidString == id }), let videoRepository else { return }
                             Task { await library.refreshDetails(record.id, using: videoRepository) }
                         } : nil,
-                        refreshableLocalIDs: Set(completed.filter { library.canRefreshDetails($0) }.map { $0.id.uuidString })
+                        refreshableLocalIDs: Set(completed.filter { library.canRefreshDetails($0) }.map { $0.id.uuidString }),
+                        onPrepareLocalArtwork: { id in
+                            guard let id = UUID(uuidString: id) else { return }
+                            await library.ensureArtwork(id, using: videoRepository)
+                        },
+                        artworkRequestRevision: (authState.authorization?.id.uuidString ?? "") + ":" + String(artworkRequestRevision)
                     )
                 }
                 if !transfers.isEmpty { MediaSectionHeading(title: String(localized: "stream_transfers")) }
@@ -53,6 +60,8 @@ struct OfflineDownloadsView: View {
             .padding(.vertical)
         }
         .geometryGroup()
+        .refreshable { library.retryArtworkOnAppearance(); artworkRequestRevision += 1 }
+        .onChange(of: scenePhase) { _, phase in if phase == .active { library.retryArtworkOnAppearance(); artworkRequestRevision += 1 } }
         .background(StreamingStyle.background)
         .navigationTitle(String(localized: "offline_title"))
         .navigationBarTitleDisplayMode(.large)
@@ -69,7 +78,7 @@ struct OfflineDownloadsView: View {
             }
         }
         .navigationDestination(item: $playing) { record in
-            OfflinePlayerScreen(record: record, library: library, authState: authState, router: router, settings: playbackSettings)
+            OfflinePlayerScreen(record: record, library: library, authState: authState, router: router, settings: playbackSettings, metadataRepository: videoRepository)
                 .toolbar(.hidden, for: .tabBar)
         }
         .onChange(of: playing?.id) { router.isPrivatePlayerVisible = playing != nil }
@@ -154,15 +163,22 @@ struct OfflineDownloadsView: View {
 /// Owns the same production view model used by VideoDetailScreen. Init stays side-effect-free.
 struct OfflinePlayerScreen: View {
     @State private var viewModel: VideoDetailViewModel
+    private let recordID: UUID
+    private let library: OfflineLibrary
+    private let metadataRepository: VideoRepositoryProtocol?
 
-    init(record: OfflineRecord, library: OfflineLibrary, authState: AuthState, router: AppRouter, settings: SponsorBlockSettings) {
+    init(record: OfflineRecord, library: OfflineLibrary, authState: AuthState, router: AppRouter, settings: SponsorBlockSettings, metadataRepository: VideoRepositoryProtocol? = nil) {
+        recordID = record.id; self.library = library; self.metadataRepository = metadataRepository
         let source = LocalVideoPlayback(record: record, library: library)
         _viewModel = State(wrappedValue: VideoDetailViewModel(
             videoId: record.id.uuidString, videoRepository: LocalVideoRepository(source: source),
             authState: authState, router: router, sponsorBlockSettings: settings, localPlayback: source))
     }
 
-    var body: some View { VideoDetailView(viewModel: viewModel) }
+    var body: some View {
+        VideoDetailView(viewModel: viewModel)
+            .task { await library.ensureArtwork(recordID, using: metadataRepository) }
+    }
 }
 
 private enum OfflineListFilter: String, CaseIterable {

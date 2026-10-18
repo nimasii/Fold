@@ -17,9 +17,7 @@ struct AuthenticatedAsyncImage: View {
                     .aspectRatio(contentMode: .fill)
             } else {
                 placeholderColor
-                    #if UI_REVIEW_PREVIEW
                     .overlay { Image(systemName: "photo").font(.caption).foregroundStyle(.tertiary).accessibilityHidden(true) }
-                    #endif
             }
         }
         // Cropping does not clip SwiftUI hit testing. A scaled portrait bitmap

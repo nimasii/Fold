@@ -206,31 +206,42 @@ struct DownloadQueueView: View {
     }
 
     private var queueControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 12) {
             Text(String(localized: viewModel.filter == "pending" ? "download_filter_pending" : "download_filter_ignore"))
                 .font(.headline).accessibilityAddTraits(.isHeader)
-            HStack(spacing: 12) {
+            Spacer(minLength: 8)
+            if authState.isPrivileged {
                 if viewModel.downloadProgress.contains(where: { $0.canStop }) {
                     Button { Task { await viewModel.stopCurrentDownload() } } label: {
-                        Label(String(localized: "download_stop_button"), systemImage: "stop.fill")
-                    }.tint(.red).accessibilityLabel(String(localized: "download_stop_button")).frame(minHeight: 44)
+                        Label(String(localized: "queue_stop"), systemImage: "stop.fill")
+                            .font(.subheadline.weight(.semibold)).frame(minHeight: 32)
+                    }
+                    .buttonStyle(.borderedProminent).tint(.red).controlSize(.small)
+                    .accessibilityLabel(String(localized: "download_stop_button"))
+                    .accessibilityIdentifier("queue.stop")
                 } else {
                     Button { Task { await viewModel.startDownload() } } label: {
-                        Label(String(localized: "download_start_button"), systemImage: "arrow.down.circle.fill")
+                        HStack(spacing: 6) {
+                            if viewModel.isStartingDownload { ProgressView().controlSize(.mini) }
+                            else { Image(systemName: "arrow.down") }
+                            Text(String(localized: "queue_start"))
+                        }.font(.subheadline.weight(.semibold)).lineLimit(1).frame(minHeight: 32)
                     }
+                    .buttonStyle(.borderedProminent).controlSize(.small)
                     .disabled(viewModel.isStartingDownload || viewModel.filter != "pending" || viewModel.items.isEmpty)
                     .accessibilityLabel(String(localized: "download_start_button"))
-                    .accessibilityIdentifier("queue.start").frame(minHeight: 44)
+                    .accessibilityIdentifier("queue.start")
                 }
-                Spacer(minLength: 0)
-                if authState.isPrivileged {
-                    Button { Task { await viewModel.rescanSubscriptions() } } label: {
-                        Label(String(localized: "download_rescan_button"), systemImage: "arrow.triangle.2.circlepath")
-                    }.disabled(viewModel.isRescanningSubscriptions)
-                        .accessibilityLabel(String(localized: "download_rescan_button"))
-                        .accessibilityIdentifier("queue.rescan").frame(minHeight: 44)
+                Button { Task { await viewModel.rescanSubscriptions() } } label: {
+                    Group {
+                        if viewModel.isRescanningSubscriptions { ProgressView().controlSize(.small) }
+                        else { Image(systemName: "arrow.triangle.2.circlepath") }
+                    }.frame(width: 44, height: 44).contentShape(Rectangle())
                 }
-            }.buttonStyle(.bordered).controlSize(.regular)
+                .buttonStyle(.borderless).disabled(viewModel.isRescanningSubscriptions)
+                .accessibilityLabel(String(localized: "download_rescan_button"))
+                .accessibilityIdentifier("queue.rescan")
+            }
         }
     }
 

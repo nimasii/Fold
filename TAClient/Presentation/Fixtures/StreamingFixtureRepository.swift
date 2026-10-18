@@ -96,10 +96,14 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
     }
 
     func addToQueue(videoId: String) async throws {}
-    func startDownload() async throws {}
+    func startDownload() async throws {
+        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-slow-queue") { try await Task.sleep(for: .seconds(3)) }
+    }
     func getNotifications() async throws -> [TaskNotification] { [] }
     func killTask(id: String) async throws {}
-    func rescanSubscriptions() async throws {}
+    func rescanSubscriptions() async throws {
+        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-slow-queue") { try await Task.sleep(for: .seconds(3)) }
+    }
 
     func getPlaylists(page: Int, type: String?) async throws -> PlaylistListResult {
         let filtered = playlists.filter { type == nil || $0.playlistType.rawValue == type }

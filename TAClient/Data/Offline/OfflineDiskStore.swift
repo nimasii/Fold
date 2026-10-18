@@ -8,6 +8,9 @@ nonisolated enum OfflineArtworkKind: String, CaseIterable { case thumbnail, chan
 nonisolated final class OfflineDiskStore: @unchecked Sendable {
     let root: URL
     private let files: FileManager
+    private let artworkLock = NSLock()
+    private var validatedArtwork: [URL: ArtworkStamp] = [:]
+    private struct ArtworkStamp: Equatable { let size: Int; let modified: Date?; let valid: Bool }
     private var manifest: URL { root.appendingPathComponent("library.json") }
     private var media: URL { root.appendingPathComponent("Media", isDirectory: true) }
     private var staging: URL { root.appendingPathComponent("Staging", isDirectory: true) }
@@ -17,6 +20,8 @@ nonisolated final class OfflineDiskStore: @unchecked Sendable {
         self.root = root; self.files = files
         for url in [root, media, staging, artwork] {
             try files.createDirectory(at: url, withIntermediateDirectories: true)
+            let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values.isDirectory == true, values.isSymbolicLink != true else { throw OfflineFailure.storage }
             try protect(url)
         }
     }
@@ -103,9 +108,26 @@ nonisolated final class OfflineDiskStore: @unchecked Sendable {
     }
     func artworkURL(_ id: UUID, kind: OfflineArtworkKind) -> URL? {
         let url = artworkFile(id, kind: kind)
-        return files.fileExists(atPath: url.path) ? url : nil
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true,
+              let size = values.fileSize, size > 0, size <= 4 * 1024 * 1024,
+              url.resolvingSymlinksInPath().deletingLastPathComponent() == artwork.resolvingSymlinksInPath() else { return nil }
+        let cached = artworkLock.withLock { validatedArtwork[url] }
+        if let cached, cached.size == size, cached.modified == values.contentModificationDate { return cached.valid ? url : nil }
+        let valid: Bool
+        if let source = CGImageSourceCreateWithURL(url as CFURL, nil) {
+            valid = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 32
+            ] as CFDictionary) != nil
+        } else { valid = false }
+        artworkLock.withLock { validatedArtwork[url] = ArtworkStamp(size: size, modified: values.contentModificationDate, valid: valid) }
+        return valid ? url : nil
     }
     func saveArtwork(_ data: Data, id: UUID, kind: OfflineArtworkKind) throws {
+        try commitArtwork(Self.preparedArtwork(data, kind: kind), id: id, kind: kind)
+    }
+    static func preparedArtwork(_ data: Data, kind: OfflineArtworkKind) throws -> Data {
         guard data.count <= 4 * 1024 * 1024,
               let source = CGImageSourceCreateWithData(data as CFData, nil),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
@@ -118,9 +140,15 @@ nonisolated final class OfflineDiskStore: @unchecked Sendable {
         guard let destination = CGImageDestinationCreateWithData(jpeg, UTType.jpeg.identifier as CFString, 1, nil) else { throw OfflineFailure.storage }
         CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.85] as CFDictionary)
         guard CGImageDestinationFinalize(destination) else { throw OfflineFailure.storage }
+        return jpeg as Data
+    }
+    func commitArtwork(_ jpeg: Data, id: UUID, kind: OfflineArtworkKind) throws {
         let target = artworkFile(id, kind: kind)
-        try (jpeg as Data).write(to: target, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        guard (try artwork.resourceValues(forKeys: [.isSymbolicLinkKey])).isSymbolicLink != true,
+              (try? target.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) != true else { throw OfflineFailure.storage }
+        try jpeg.write(to: target, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         try protect(target)
+        artworkLock.withLock { validatedArtwork[target] = nil }
     }
     func cleanOrphans(keeping records: [OfflineRecord]) throws {
         let keep = Set(records.filter { $0.status == .ready }.compactMap { file(for: $0)?.lastPathComponent })

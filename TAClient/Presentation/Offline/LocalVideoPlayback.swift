@@ -4,16 +4,16 @@ import Foundation
 struct LocalVideoPlayback {
     let record: OfflineRecord
     let mediaURL: URL?
-    let artworkURL: URL?
-    let artwork: LocalVideoArtwork
+    var artworkURL: URL? { library.thumbnailURL(record.id) }
+    var artwork: LocalVideoArtwork {
+        LocalVideoArtwork(thumbnail: artworkURL, channel: library.channelArtworkURL(record.id), revision: library.artworkRevision)
+    }
     let library: OfflineLibrary
 
     init(record: OfflineRecord, library: OfflineLibrary) {
         self.record = record
         self.library = library
         mediaURL = library.localURL(for: record)
-        artworkURL = library.thumbnailURL(record.id)
-        artwork = LocalVideoArtwork(thumbnail: artworkURL, channel: library.channelArtworkURL(record.id), revision: library.artworkRevision)
     }
 }
 
