@@ -1,6 +1,6 @@
 from http.server import ThreadingHTTPServer,BaseHTTPRequestHandler
 from threading import Thread
-import json
+import json,time
 state={'capture':0,'ping':0,'range':0,'csrf':0,'mode':'online'}
 class Handler(BaseHTTPRequestHandler):
  def log_message(self,*args): pass
@@ -20,6 +20,9 @@ class Handler(BaseHTTPRequestHandler):
   if self.path=='/fixture-login':
    self.send_response(302);self.send_header('Set-Cookie','sessionid=fixture; Path=/; HttpOnly');self.send_header('Set-Cookie','csrftoken=fixture; Path=/');self.send_header('Location','/');self.end_headers();return
   if self.path.startswith('/api/'):
+   if state['mode']=='slow-reject':
+    time.sleep(3)
+    return self.data(403,{'detail':'Synthetic rejected sign-in'})
    if state['mode']=='offline':self.close_connection=True;self.connection.close();return
    if state['mode']=='maintenance':return self.send(503,b'<html>Fixture maintenance</html>',{'Content-Type':'text/html'})
    if state['mode']=='expired':return self.data(403,{'detail':'Fixture session expired'})
