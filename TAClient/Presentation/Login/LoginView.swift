@@ -9,122 +9,22 @@ struct LoginView: View {
 
     private enum Field: Hashable { case server, token }
     private var hasAddress: Bool { !viewModel.serverURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var hasToken: Bool { !viewModel.apiToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                VStack(alignment: .leading, spacing: 18) {
-                    Image(systemName: "play.rectangle.on.rectangle.fill")
-                        .font(.largeTitle).foregroundStyle(.tint).accessibilityHidden(true)
-                    Text(String(localized: "stream_login_headline"))
-                        .font(.largeTitle.bold()).fixedSize(horizontal: false, vertical: true)
-                    Text(String(localized: "connection_tagline")).font(.title3).foregroundStyle(.secondary)
-                }
-                .padding(.top, 20)
-
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Label(String(localized: "connection_server_address"), systemImage: "network")
-                            .font(.subheadline.weight(.semibold))
-                        TextField(String(localized: "connection_address_placeholder"), text: $viewModel.serverURL)
-                            .textContentType(.URL)
-                            .keyboardType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textFieldStyle(.plain)
-                            .padding(.vertical, 12)
-                            .padding(.horizontal, 14)
-                            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-                            .focused($focusedField, equals: .server)
-                            .submitLabel(.go)
-                            .onSubmit { beginSignIn() }
-                            .accessibilityLabel(String(localized: "connection_server_address"))
-                            .accessibilityIdentifier("connection.server")
-                        Text(String(localized: "connection_address_help"))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-
-                    Button(action: beginSignIn) {
-                        HStack(spacing: 10) {
-                            if viewModel.isLoading { ProgressView().tint(.primary) }
-                            Text(String(localized: "connection_sign_in"))
-                                .fontWeight(.semibold)
-                            Spacer(minLength: 0)
-                            if !dynamicTypeSize.isAccessibilitySize { Image(systemName: "arrow.right") }
-                        }
-                        .padding(.vertical, 3)
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .buttonBorderShape(dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: 18) : .capsule)
-                    .disabled(viewModel.isLoading || !hasAddress)
-                    .accessibilityLabel(String(localized: "connection_sign_in"))
-                    .accessibilityIdentifier("connection.sign-in")
-
-                    Text(String(localized: "connection_gateway_help"))
-                        .font(.footnote).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(20)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 24))
-
-                DisclosureGroup(isExpanded: $showToken) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(String(localized: "login_token_explanation"))
-                            .font(.footnote).foregroundStyle(.secondary)
-                        SecureField(String(localized: "login_api_token"), text: $viewModel.apiToken)
-                            .textFieldStyle(.plain)
-                            .padding(14)
-                            .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 12))
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focusedField, equals: .token)
-                            .submitLabel(.go)
-                            .onSubmit { connectToken() }
-                            .accessibilityLabel(String(localized: "login_api_token"))
-                        Button(action: connectToken) {
-                            Text(String(localized: "connection_token_button"))
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.large)
-                        .buttonBorderShape(.capsule)
-                        .disabled(viewModel.isLoading || !hasAddress || viewModel.apiToken.isEmpty)
-                        .accessibilityLabel(String(localized: "connection_token_button"))
-                    }
-                    .padding(.top, 16)
-                } label: {
-                    Label(String(localized: "login_token_fallback"), systemImage: "key.horizontal")
-                        .font(.subheadline.weight(.medium))
-                }
-                .padding(.horizontal, 4)
-                .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: showToken)
-
-                if let error = viewModel.errorMessage {
-                    Label(error, systemImage: "exclamationmark.circle.fill")
-                        .font(.footnote).foregroundStyle(.red)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityElement(children: .combine)
-                }
-
-                NavigationLink(value: Route.offlineDownloads) {
-                    Label(String(localized: "offline_open_saved"), systemImage: "arrow.down.circle")
-                }
-                .font(.subheadline.weight(.semibold))
-                .accessibilityLabel(String(localized: "offline_open_saved"))
-
-                Label(String(localized: showToken ? "connection_token_privacy" : "connection_privacy_help"), systemImage: "lock.shield")
-                    .font(.footnote).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 4)
+                introduction
+                serverEntry
+                signInOptions
+                savedDownloads
             }
             .frame(maxWidth: 520)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 28)
+            .padding(.horizontal, StreamingStyle.gutter)
+            .padding(.vertical, 24)
             .frame(maxWidth: .infinity)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(StreamingStyle.background)
         .scrollDismissesKeyboard(.interactively)
         .navigationTitle("Tube Archivist")
         .navigationBarTitleDisplayMode(.inline)
@@ -138,6 +38,168 @@ struct LoginView: View {
         .sheet(item: $viewModel.signInDestination) { destination in
             ServerSignInView(url: destination.url, viewModel: viewModel)
         }
+        .onChange(of: showToken) { _, expanded in
+            if !expanded && focusedField == .token { focusedField = nil }
+        }
+    }
+
+    private var introduction: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Image(systemName: "play.rectangle.on.rectangle.fill")
+                .font(.title.weight(.semibold))
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+                .padding(.bottom, 4)
+            Text(String(localized: "stream_login_headline"))
+                .font(.largeTitle.bold())
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text(String(localized: "connection_tagline"))
+                .font(.subheadline).foregroundStyle(.secondary)
+        }
+    }
+
+    private var serverEntry: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(String(localized: "connection_server_address"))
+                .font(.headline).accessibilityAddTraits(.isHeader)
+            TextField(String(localized: "connection_address_placeholder"), text: $viewModel.serverURL)
+                .textContentType(.URL)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textFieldStyle(.plain)
+                .padding(16)
+                .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: StreamingStyle.corner))
+                .focused($focusedField, equals: .server)
+                .submitLabel(showToken ? .next : .go)
+                .onSubmit {
+                    if showToken { focusedField = .token }
+                    else { beginSignIn() }
+                }
+                .disabled(viewModel.isLoading)
+                .accessibilityLabel(String(localized: "connection_server_address"))
+                .accessibilityIdentifier("connection.server")
+            Text(String(localized: "connection_address_help"))
+                .font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var signInOptions: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if let error = viewModel.errorMessage {
+                Label(error, systemImage: "exclamationmark.circle.fill")
+                    .font(.subheadline).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: StreamingStyle.corner))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("connection.error")
+            }
+            Button(action: beginSignIn) {
+                actionLabel("connection_sign_in", loading: viewModel.isLoading && !showToken)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .buttonBorderShape(actionShape)
+            .disabled(viewModel.isLoading || !hasAddress)
+            .accessibilityLabel(String(localized: "connection_sign_in"))
+            .accessibilityValue(viewModel.isLoading ? String(localized: "connection_connecting") : "")
+            .accessibilityIdentifier("connection.sign-in")
+
+            Text(String(localized: "connection_gateway_help"))
+                .font(.footnote).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Divider().padding(.vertical, 4)
+            tokenOption
+
+            Label(String(localized: showToken ? "connection_token_privacy" : "connection_privacy_help"), systemImage: "lock.shield")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var tokenOption: some View {
+        DisclosureGroup(isExpanded: $showToken) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(String(localized: "login_token_explanation"))
+                    .font(.footnote).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                SecureField(String(localized: "login_api_token"), text: $viewModel.apiToken)
+                    .textFieldStyle(.plain)
+                    .padding(16)
+                    .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: StreamingStyle.corner))
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .focused($focusedField, equals: .token)
+                    .submitLabel(.go)
+                    .onSubmit { connectToken() }
+                    .disabled(viewModel.isLoading)
+                    .accessibilityLabel(String(localized: "login_api_token"))
+                    .accessibilityIdentifier("connection.token")
+                Button(action: connectToken) {
+                    actionLabel("connection_token_button", loading: viewModel.isLoading)
+                }
+                .buttonStyle(.bordered).controlSize(.large).buttonBorderShape(actionShape)
+                .disabled(viewModel.isLoading || !hasAddress || !hasToken)
+                .accessibilityLabel(String(localized: "connection_token_button"))
+                .accessibilityValue(viewModel.isLoading ? String(localized: "connection_connecting") : "")
+                .accessibilityIdentifier("connection.token-connect")
+            }
+            .padding(.top, 16)
+        } label: {
+            Label(String(localized: "login_token_fallback"), systemImage: "key.horizontal")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 44, alignment: .leading)
+        }
+        .disabled(viewModel.isLoading)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: showToken)
+    }
+
+    private var savedDownloads: some View {
+        NavigationLink(value: Route.offlineDownloads) {
+            HStack(spacing: 14) {
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.title2).foregroundStyle(.tint).accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(localized: "offline_open_saved")).font(.headline)
+                    Text(String(localized: "connection_downloads_help"))
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary).accessibilityHidden(true)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: StreamingStyle.corner))
+        }
+        .buttonStyle(MediaPressStyle()).foregroundStyle(.primary)
+        .accessibilityLabel(String(localized: "offline_open_saved"))
+        .accessibilityHint(String(localized: "connection_downloads_help"))
+        .accessibilityIdentifier("connection.downloads")
+    }
+
+    private var actionShape: ButtonBorderShape {
+        dynamicTypeSize.isAccessibilitySize ? .roundedRectangle(radius: StreamingStyle.corner) : .capsule
+    }
+
+    private func actionLabel(_ key: String.LocalizationValue, loading: Bool) -> some View {
+        HStack(spacing: 10) {
+            if loading { ProgressView().accessibilityHidden(true) }
+            Text(loading ? String(localized: "connection_connecting") : String(localized: key)).fontWeight(.semibold)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, minHeight: 28)
+        .padding(.vertical, 2)
     }
 
     private func beginSignIn() {
@@ -147,7 +209,7 @@ struct LoginView: View {
     }
 
     private func connectToken() {
-        guard hasAddress, !viewModel.apiToken.isEmpty, !viewModel.isLoading else { return }
+        guard hasAddress, hasToken, !viewModel.isLoading else { return }
         focusedField = nil
         Task { await viewModel.connectToken() }
     }
