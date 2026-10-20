@@ -74,7 +74,7 @@ struct DownloadMapperTests {
         #expect(item?.thumbUrl == "\(serverURL)/cache/thumb.jpg")
     }
 
-    @Test func absoluteThumbUrl_keptAsIs() {
+    @Test func foreignThumbUrl_doesNotReceiveServerAuthorization() {
         let dto = DownloadItemDTO(
             youtubeId: "dl1", title: "T",
             channelName: nil, channelId: nil, duration: nil,
@@ -82,6 +82,6 @@ struct DownloadMapperTests {
             vidThumbUrl: "https://cdn.example.com/thumb.jpg", vidType: nil, timestamp: nil
         )
         let item = DownloadMapper.map(dto, serverURL: serverURL)
-        #expect(item?.thumbUrl == "https://cdn.example.com/thumb.jpg")
+        #expect(item?.thumbUrl == nil)
     }
 }

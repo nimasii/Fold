@@ -36,47 +36,36 @@ struct FeaturedVideo: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     var body: some View {
-        Group {
-            if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 16) {
-                    artwork.aspectRatio(16 / 9, contentMode: .fit).clipShape(.rect(cornerRadius: StreamingStyle.corner))
-                    information
+        VStack(alignment: .leading, spacing: 0) {
+            Color(.secondarySystemBackground)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .overlay { AuthenticatedAsyncImage(url: video.thumbUrl) }
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [.clear, Color(.secondarySystemBackground)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 64)
                 }
-            } else {
-                Color(.secondarySystemBackground)
-                    .aspectRatio(0.95, contentMode: .fit)
-                    .overlay { artwork }
-                    .overlay {
-                        LinearGradient(colors: [.clear, .black.opacity(0.08), .black.opacity(0.96)], startPoint: .top, endPoint: .bottom)
-                    }
-                    .overlay(alignment: .bottomLeading) { information.padding(24).foregroundStyle(.white) }
-                    .clipShape(.rect(cornerRadius: 24))
+                .clipped().accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(String(localized: "stream_featured"))
+                    .font(.caption.weight(.bold)).tracking(2).foregroundStyle(.secondary)
+                Text(video.title).font(.title.bold()).lineLimit(typeSize.isAccessibilitySize ? nil : 3)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(video.channelName) · \(video.durationStr)")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Button(action: onOpen) {
+                    Label(String(localized: "stream_open_video"), systemImage: "play.fill")
+                        .font(.headline).frame(maxWidth: .infinity, minHeight: 32)
+                }
+                .buttonStyle(.borderedProminent).controlSize(.large).buttonBorderShape(.capsule)
+                .tint(.primary).foregroundStyle(Color(.systemBackground))
+                .accessibilityLabel(String(localized: "stream_open_video") + ", " + video.title)
             }
+            .padding([.horizontal, .bottom], 20).padding(.top, 4)
         }
+        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 24))
+        .clipShape(.rect(cornerRadius: 24))
         .padding(.horizontal, StreamingStyle.gutter)
         .accessibilityIdentifier("watch.featured")
-    }
-    private var artwork: some View {
-        Color(.secondarySystemBackground)
-            .overlay { AuthenticatedAsyncImage(url: video.thumbUrl) }
-            .clipped().allowsHitTesting(false).accessibilityHidden(true)
-    }
-    private var information: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "stream_featured"))
-                .font(.caption.weight(.bold)).tracking(2)
-            Text(video.title).font(.largeTitle.bold()).lineLimit(typeSize.isAccessibilitySize ? nil : 3)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("\(video.channelName) · \(video.durationStr)").font(.subheadline.weight(.medium))
-            Button(action: onOpen) {
-                Label(String(localized: "stream_open_video"), systemImage: "arrow.up.right")
-                    .font(.headline).frame(maxWidth: .infinity, minHeight: 32)
-            }
-            .buttonStyle(.borderedProminent).controlSize(.large).buttonBorderShape(.capsule)
-            .tint(typeSize.isAccessibilitySize ? .accentColor : .white)
-            .foregroundStyle(typeSize.isAccessibilitySize ? Color.white : Color.black)
-            .accessibilityLabel(String(localized: "stream_open_video") + ", " + video.title)
-        }
     }
 }
 

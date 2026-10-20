@@ -202,8 +202,14 @@ final class OfflineLibrary {
         let attempt = UUID(); backfillAttempts[id] = attempt
         let task = Task { [weak self] in
             guard let self else { return }
-            let needsMetadata = record.metadata == nil || record.metadata?.thumbnailPath == nil || record.metadata?.channelArtworkPath == nil
-            if needsMetadata, let repository, Date().timeIntervalSince(self.metadataReadDates[id] ?? .distantPast) >= 300 {
+            let hasPaths = record.metadata?.thumbnailPath != nil && record.metadata?.channelArtworkPath != nil
+            if hasPaths {
+                self.queueArtwork(id)
+                await self.artworkTasks[id]?.value
+                if disk.artworkURL(id, kind: .thumbnail) != nil && disk.artworkURL(id, kind: .channel) != nil { return }
+            }
+            var refreshedMetadata = false
+            if let repository, Date().timeIntervalSince(self.metadataReadDates[id] ?? .distantPast) >= 300 {
                 self.metadataReadDates[id] = .now
                 do {
                     let video = try await repository.getVideo(id: record.videoID)
@@ -212,14 +218,15 @@ final class OfflineLibrary {
                           let index = self.records.firstIndex(where: { $0.id == id && $0.origin == record.origin }) else { return }
                     self.records[index].metadata = OfflineVideoMetadata(video: video, origin: record.origin)
                     guard self.persist() else { return }
+                    refreshedMetadata = true
                 } catch {
-                    self.metadataReadDates[id] = nil // A later online appearance can retry.
-                    return
+                    self.metadataReadDates[id] = nil // Try supported cached routes even if the archived detail is gone.
                 } // Optional artwork never blocks the private copy.
             }
             guard !Task.isCancelled, auth.isActive, self.authState.authorization?.id == auth.id,
                   self.backfillAttempts[id] == attempt else { return }
-            self.queueArtwork(id)
+            guard !hasPaths || refreshedMetadata else { return }
+            self.queueArtwork(id, restart: true)
             await self.artworkTasks[id]?.value
         }
         artworkBackfills[id] = task
@@ -232,11 +239,11 @@ final class OfflineLibrary {
         artworkBackfills.removeAll(); backfillAttempts.removeAll()
         artworkRetryDates.removeAll(); metadataReadDates.removeAll()
     }
-    private func queueArtwork(_ id: UUID, replace: Bool = false) {
-        if replace { artworkTasks[id]?.cancel(); artworkTasks[id] = nil; artworkAttempts[id] = nil }
+    private func queueArtwork(_ id: UUID, replace: Bool = false, restart: Bool = false) {
+        if replace || restart { artworkTasks[id]?.cancel(); artworkTasks[id] = nil; artworkAttempts[id] = nil }
         guard artworkTasks[id] == nil, let record = records.first(where: { $0.id == id }),
-              let metadata = record.metadata, let auth = authState.authorization, canRefreshDetails(record), let disk else { return }
-        let candidates: [(OfflineArtworkKind, String?)] = [(.thumbnail, metadata.thumbnailPath), (.channel, metadata.channelArtworkPath)]
+              let auth = authState.authorization, canRefreshDetails(record), let disk else { return }
+        let candidates: [(OfflineArtworkKind, String?)] = [(.thumbnail, record.metadata?.thumbnailPath), (.channel, record.metadata?.channelArtworkPath)]
         let attempt = UUID(); artworkAttempts[id] = attempt
         let limiter = artworkLimiter
         artworkTasks[id] = Task { [weak self] in
@@ -253,20 +260,28 @@ final class OfflineLibrary {
             for (kind, path) in candidates {
                 guard !Task.isCancelled, auth.isActive, self?.artworkAttempts[id] == attempt, self?.authState.authorization?.id == auth.id,
                       self?.records.contains(where: { $0.id == id }) == true else { return }
-                guard let path, let url = OfflineVideoMetadata.artworkURL(path: path, origin: record.origin), replace || disk.artworkURL(id, kind: kind) == nil else { continue }
-                do {
-                    guard let configuration = self?.artworkConfiguration.copy() as? URLSessionConfiguration else { return }
-                    let data = try await OfflineArtworkFetch.data(url: url, authorization: auth, configuration: configuration)
-                    guard !Task.isCancelled, auth.isActive, self?.artworkAttempts[id] == attempt, self?.authState.authorization?.id == auth.id,
-                          self?.records.contains(where: { $0.id == id }) == true else { return }
-                    let jpeg = try await Task.detached(priority: .utility) { try OfflineDiskStore.preparedArtwork(data, kind: kind) }.value
-                    guard !Task.isCancelled, auth.isActive, self?.artworkAttempts[id] == attempt,
-                          self?.authState.authorization?.id == auth.id,
-                          self?.records.contains(where: { $0.id == id && $0.origin == record.origin }) == true else { return }
-                    try disk.commitArtwork(jpeg, id: id, kind: kind)
-                    // Trigger presentation refresh only after the private image was committed.
-                    self?.artworkRevision += 1
-                } catch { /* Optional artwork never invalidates a completed local video. */ }
+                guard replace || disk.artworkURL(id, kind: kind) == nil else { continue }
+                let primary = path.flatMap { OfflineVideoMetadata.artworkURL(path: $0, origin: record.origin)?.absoluteString }
+                let fallbacks = kind == .thumbnail ? ServerArtwork.videoFallbacks(record.videoID, baseURL: record.origin)
+                    : ServerArtwork.channelFallbacks(record.metadata?.channelID ?? "", baseURL: record.origin)
+                var attempted = Set<String>()
+                for candidate in ([primary].compactMap { $0 } + fallbacks) where attempted.insert(candidate).inserted {
+                    guard !Task.isCancelled, auth.isActive, let url = URL(string: candidate) else { return }
+                    do {
+                        guard let configuration = self?.artworkConfiguration.copy() as? URLSessionConfiguration else { return }
+                        let data = try await OfflineArtworkFetch.data(url: url, authorization: auth, configuration: configuration)
+                        guard !Task.isCancelled, auth.isActive, self?.artworkAttempts[id] == attempt, self?.authState.authorization?.id == auth.id,
+                              self?.records.contains(where: { $0.id == id }) == true else { return }
+                        let jpeg = try await Task.detached(priority: .utility) { try OfflineDiskStore.preparedArtwork(data, kind: kind) }.value
+                        guard !Task.isCancelled, auth.isActive, self?.artworkAttempts[id] == attempt,
+                              self?.authState.authorization?.id == auth.id,
+                              self?.records.contains(where: { $0.id == id && $0.origin == record.origin }) == true else { return }
+                        try disk.commitArtwork(jpeg, id: id, kind: kind)
+                        // Trigger presentation refresh only after the private image was committed.
+                        self?.artworkRevision += 1
+                        break
+                    } catch { /* Try another supported server route; the saved video stays ready. */ }
+                }
             }
         }
     }
