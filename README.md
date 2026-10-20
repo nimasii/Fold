@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/logo.png" alt="TA Client logo" width="220">
+  <img src="docs/branding/Fold/icon-default.png" alt="Fold logo" width="220">
 </p>
 
-<h1 align="center">TA Client</h1>
+<h1 align="center">Fold</h1>
 
 <p align="center">
   A native iOS and iPadOS client for <a href="https://github.com/tubearchivist/tubearchivist">Tube Archivist</a> — your self-hosted YouTube media archive.
@@ -18,7 +18,7 @@
 
 ## Try it on your device — TestFlight beta
 
-TA Client is currently in public beta on Apple TestFlight. Anyone with an iPhone or iPad can install the latest build directly:
+Fold is currently in public beta on Apple TestFlight. Anyone with an iPhone or iPad can install the latest build directly:
 
 > **[Join the TestFlight beta →](https://testflight.apple.com/join/V4wHhJSN)**
 
@@ -28,7 +28,7 @@ How to install:
 2. Tap the link above on your device
 3. Tap **Accept**, then **Install**
 
-Beta builds expire 90 days after upload; if your installed copy stops launching, return to TestFlight and update to the newest build. If you find a bug, please file it as a [GitHub issue](https://github.com/MikhailZhukov/TAClient/issues) or use TestFlight's built-in feedback (shake the device or take a screenshot in the app).
+Beta builds expire 90 days after upload; if your installed copy stops launching, return to TestFlight and update to the newest build. If you find a bug, please file it as a [GitHub issue](https://github.com/nimasii/Fold/issues) or use TestFlight's built-in feedback (shake the device or take a screenshot in the app).
 
 If you prefer to build from source, see [Building](#building) below.
 
@@ -63,9 +63,9 @@ If you prefer to build from source, see [Building](#building) below.
   <a href="docs/screenshots/ipad_settings.png"><img src="docs/screenshots/ipad_settings.png" width="32%" alt="Settings"></a>
 </p>
 
-## Why TA Client
+## Why Fold
 
-Tube Archivist is excellent at archiving your YouTube library on a server you control, but its web UI is built for desktop browsers. TA Client gives you a native iOS experience that respects Apple's Human Interface Guidelines: Dynamic Type, Dark Mode, full VoiceOver labels, lock-screen playback, and AirPlay routing all work the way iPhone and iPad users expect.
+Tube Archivist is excellent at archiving your YouTube library on a server you control, but its web UI is built for desktop browsers. Fold gives you a native iOS experience that respects Apple's Human Interface Guidelines: Dynamic Type, Dark Mode, full VoiceOver labels, lock-screen playback, and AirPlay routing all work the way iPhone and iPad users expect.
 
 ## Features
 
@@ -99,24 +99,24 @@ Tube Archivist is excellent at archiving your YouTube library on a server you co
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/TAClient.git
-   cd TAClient
+   git clone https://github.com/nimasii/Fold.git
+   cd Fold
    ```
 
-2. Open `TAClient.xcodeproj` in Xcode. Swift Package Manager will fetch [`MobileVLCKit-SPM`](https://github.com/MobileVLCKit-SPM/MobileVLCKit-SPM) on first open — this is the LGPL-licensed VLC binding required for VP9 playback.
+2. Open `Fold.xcodeproj` in Xcode. Swift Package Manager will fetch [`MobileVLCKit-SPM`](https://github.com/MobileVLCKit-SPM/MobileVLCKit-SPM) on first open — this is the LGPL-licensed VLC binding required for VP9 playback.
 
-3. Update the signing settings for **both** targets (`TAClient` and `ShareExtension`):
+3. Update the signing settings for **both** targets (`Fold` and `ShareExtension`):
    - Select the target → **Signing & Capabilities**
    - Set your **Team**
-   - Change the **Bundle Identifier** from `ru.mzhukov.TAClient` to your own (e.g. `com.yourname.TAClient`); the Share Extension must match the same prefix (e.g. `com.yourname.TAClient.ShareExtension`)
-   - In `TAClient/TAClient.entitlements` and `ShareExtension/ShareExtension.entitlements`, replace the keychain access group `5AS4WKH94K.ru.mzhukov.TAClient` with `<YOUR_TEAM_ID>.<your.bundle.id>` — both files must use the same group, otherwise the Share Extension cannot read credentials saved by the main app
+   - Change the **Bundle Identifier** from `com.jacobcampbell.ta-client` to your own (e.g. `com.yourname.Fold`); the Share Extension must match the same prefix (e.g. `com.yourname.Fold.ShareExtension`)
+   - In `Fold/Fold.entitlements` and `ShareExtension/ShareExtension.entitlements`, replace the keychain access group `LUZS336ZHP.com.jacobcampbell.ta-client` with `<YOUR_TEAM_ID>.<your.bundle.id>` — both files must use the same group, otherwise the Share Extension cannot read credentials saved by the main app
 
 4. Build and run on a simulator or device.
 
 ### Command-line build
 
 ```bash
-xcodebuild build -scheme TAClient -destination "platform=iOS Simulator,name=iPhone 17 Pro"
+xcodebuild build -scheme Fold -destination "platform=iOS Simulator,name=iPhone 17 Pro"
 ```
 
 ## First Run
@@ -133,7 +133,7 @@ If your server uses a self-signed certificate or plain HTTP on a local network, 
 
 The majority of this project was built collaboratively with [Claude Code](https://claude.com/claude-code) (Anthropic).
 
-The app icon was generated with ChatGPT (OpenAI).
+The Fold icon uses editable SVG ribbon layers in a native Xcode Icon Composer document, based on the selected ChatGPT concept. See [icon sources and native previews](docs/branding/Fold/).
 
 ## Acknowledgements
 
@@ -141,13 +141,13 @@ The app icon was generated with ChatGPT (OpenAI).
 - [MobileVLCKit-SPM](https://github.com/MobileVLCKit-SPM/MobileVLCKit-SPM) — VP9 playback (LGPL-2.1-or-later)
 - [SponsorBlock](https://sponsor.ajay.app/) — community-maintained sponsor segment data, served by your TA instance
 
-This project is **not** affiliated with Tube Archivist. Please do not file TA Client issues in the Tube Archivist repository.
+This project is **not** affiliated with Tube Archivist. Please do not file Fold issues in the Tube Archivist repository.
 
 ## License
 
 Copyright © 2026 Mikhail Zhukov.
 
-TA Client is licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for the full license text and the [NOTICE](NOTICE) file for attribution requirements.
+Fold is licensed under the **Apache License, Version 2.0**. See the [LICENSE](LICENSE) file for the full license text and the [NOTICE](NOTICE) file for attribution requirements.
 
 You are free to use, modify, and redistribute this software, including in commercial and proprietary projects, subject to the conditions of the Apache-2.0 license (preserve the license text, copyright notices, and the NOTICE file).
 

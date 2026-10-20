@@ -1,0 +1,133 @@
+import SwiftUI
+import Testing
+@testable import Fold
+
+struct AppRouterTests {
+
+    private func makeRouter(authenticated: Bool = false) -> AppRouter {
+        let keychain = KeychainService()
+        keychain.clearAll()
+        let authState = AuthState(keychainService: keychain)
+        if authenticated {
+            authState.setCredentials(token: "tok", serverURL: "https://ta.example.com")
+        }
+        return AppRouter(authState: authState)
+    }
+
+    @Test func init_authenticated_startsSplash() {
+        let router = makeRouter(authenticated: true)
+        #expect(router.appState == .splash)
+
+        // Cleanup
+        router.handleUnauthorized()
+    }
+
+    @Test func init_unauthenticated_startsLogin() {
+        let router = makeRouter(authenticated: false)
+        #expect(router.appState == .login)
+    }
+
+    @Test func navigate_appendsToPath() {
+        let router = makeRouter()
+        #expect(router.path.isEmpty)
+
+        router.navigate(to: .search)
+        #expect(router.path.count == 1)
+
+        router.navigate(to: .videoDetail(videoId: "abc"))
+        #expect(router.path.count == 2)
+    }
+
+    @Test func goBack_removesFromPath() {
+        let router = makeRouter()
+        router.navigate(to: .search)
+        router.navigate(to: .videoDetail(videoId: "abc"))
+        #expect(router.path.count == 2)
+
+        router.goBack()
+        #expect(router.path.count == 1)
+    }
+
+    @Test func goBack_whenEmpty_doesNotCrash() {
+        let router = makeRouter()
+        #expect(router.path.isEmpty)
+        router.goBack()
+        #expect(router.path.isEmpty)
+    }
+
+    @Test func handleUnauthorized_setsLoginAndClearsPath() {
+        let router = makeRouter(authenticated: true)
+        router.navigate(to: .search)
+        router.navigate(to: .videoDetail(videoId: "abc"))
+
+        router.handleUnauthorized()
+
+        #expect(router.appState == .login)
+        #expect(router.path.isEmpty)
+    }
+
+    @Test func onLoginSuccess_setsAuthenticatedAndClearsPath() {
+        let router = makeRouter()
+        router.navigate(to: .search)
+
+        router.onLoginSuccess()
+
+        #expect(router.appState == .authenticated)
+        #expect(router.path.isEmpty)
+    }
+    @Test @MainActor func tabNavigation_retainsIndependentPathsAndBackTargetsActiveTab() {
+        let auth = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
+        let router = AppRouter(authState: auth)
+        router.onLoginSuccess()
+        router.navigate(to: .videoDetail(videoId: "one"))
+        router.selectedTab = .downloads
+        #expect(router.path.isEmpty)
+        router.navigate(to: .playlistList)
+        router.navigate(to: .playlistDetail(playlistId: "list"))
+        router.goBack()
+        #expect(router.path.count == 1)
+        router.selectedTab = .library
+        #expect(router.path.count == 1)
+        #expect(router.path(for: .queue).isEmpty)
+        router.handleUnauthorized()
+        for tab in AppTab.allCases { #expect(router.path(for: tab).isEmpty) }
+        #expect(router.selectedTab == .library)
+        router.onLoginSuccess()
+        #expect(router.path.isEmpty)
+    }
+
+    @Test @MainActor func librarySearchIsContextWithinThreeSections() {
+        #expect(AppTab.allCases == [.library, .downloads, .queue])
+        let auth = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
+        let router = AppRouter(authState: auth)
+        router.onLoginSuccess()
+        router.navigate(to: .playlistList)
+        router.selectedTab = .downloads
+        router.navigate(to: .settings)
+        router.selectedTab = .queue
+        router.navigate(to: .settings)
+        router.beginLibrarySearch()
+        #expect(router.selectedTab == .library)
+        #expect(router.path.isEmpty)
+        #expect(router.isLibrarySearchActive)
+        #expect(router.path(for: .library).count == 1)
+        #expect(router.path(for: .downloads).count == 1)
+        #expect(router.path(for: .queue).count == 1)
+        router.navigate(to: .videoDetail(videoId: "found"))
+        #expect(router.librarySearchPath.count == 1)
+        #expect(router.path(for: .library).count == 1)
+        router.librarySearchQuery = "Earth"
+        router.cancelLibrarySearch()
+        #expect(router.librarySearchQuery.isEmpty)
+        #expect(!router.isLibrarySearchActive)
+        #expect(router.selectedTab == .queue)
+        #expect(router.librarySearchPath.isEmpty)
+        router.beginLibrarySearch()
+        router.librarySearchQuery = "Moon"
+        router.handleUnauthorized()
+        #expect(router.librarySearchQuery.isEmpty)
+        #expect(!router.isLibrarySearchActive)
+        for tab in AppTab.allCases { #expect(router.path(for: tab).isEmpty) }
+    }
+
+}

@@ -4,16 +4,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-TAClient — iOS/iPadOS client for [Tube Archivist](https://github.com/tubearchivist/tubearchivist), a self-hosted YouTube archiver. SwiftUI + MobileVLCKit for VP9 codec support. 104 app files + 1 Share Extension file, 53 test files, ~577 passing tests (excluding `testLaunchPerformance` — known XCUITest perf-metric flake unrelated to project code). Licensed under Apache-2.0 (MobileVLCKit remains under LGPL-2.1-or-later — see `NOTICE`).
+Fold — iOS/iPadOS client for [Tube Archivist](https://github.com/tubearchivist/tubearchivist), a self-hosted YouTube archiver. SwiftUI + MobileVLCKit for VP9 codec support. 104 app files + 1 Share Extension file, 53 test files, ~577 passing tests (excluding `testLaunchPerformance` — known XCUITest perf-metric flake unrelated to project code). Licensed under Apache-2.0 (MobileVLCKit remains under LGPL-2.1-or-later — see `NOTICE`).
 
 ## Build & Run
 
 ```bash
 # Build (shell has persistent zsh parse error — always use /bin/bash -c)
-/bin/bash -c 'xcodebuild build -scheme TAClient -destination "platform=iOS Simulator,name=iPhone 17 Pro"'
+/bin/bash -c 'xcodebuild build -scheme Fold -destination "platform=iOS Simulator,name=iPhone 17 Pro"'
 
 # Run tests
-/bin/bash -c 'xcodebuild test -scheme TAClient -destination "platform=iOS Simulator,name=iPhone 17 Pro"'
+/bin/bash -c 'xcodebuild test -scheme Fold -destination "platform=iOS Simulator,name=iPhone 17 Pro"'
 ```
 
 - Xcode 26.2, **iOS 17.0 deployment target** (minimum: `@Observable`, `@Bindable`, new `.onChange` syntax)
@@ -21,7 +21,7 @@ TAClient — iOS/iPadOS client for [Tube Archivist](https://github.com/tubearchi
 - String Catalog localization (en + ru) via `Localizable.xcstrings`
 - SPM dependency: `MobileVLCKit-SPM` (`https://github.com/MobileVLCKit-SPM/MobileVLCKit-SPM`)
 - FileSystemSynchronizedRootGroup — Xcode auto-detects new files, no need to add to project
-- Bundle ID: `ru.mzhukov.TAClient`, display name: "TA Client"
+- Bundle ID: `com.jacobcampbell.ta-client`, display name: "Fold"
 
 ## Apple Guidelines Compliance
 
@@ -39,7 +39,7 @@ This app targets App Store publication. **Strictly follow Apple Human Interface 
 
 ## Architecture
 
-Clean Architecture with three layers, all under `TAClient/`:
+Clean Architecture with three layers, all under `Fold/`:
 
 ```
 Domain/    → Models (Video, Channel, Comment, DownloadItem, DownloadTaskInfo, PlayerInfo)
@@ -63,7 +63,7 @@ DI/        → DependencyContainer (manual singleton)
 - `ImageCache` actor with `AuthenticatedAsyncImage` for auth'd image loading; negative result caching (60s cooldown) to prevent retry storms
 - `AuthState` (@Observable) wraps Keychain reads/writes for token + serverURL
 - Unauthorized (401/403) responses trigger `router.handleUnauthorized()` which clears Keychain and returns to login. Data-layer components (`VideoCachePreloader`, `CachingResourceLoader`) post `Notification.Name.taAuthUnauthorized` (defined in `Domain/Util/Notification+Names.swift`) instead of holding a router reference — `AppRouter` subscribes on init and routes the event through its idempotent `handleUnauthorized()`, preserving Clean Architecture boundaries
-- `scenePhase` observer in `TAClientApp` forces window layout on `.active` — fixes stale safe area insets after iPad wake from sleep
+- `scenePhase` observer in `FoldApp` forces window layout on `.active` — fixes stale safe area insets after iPad wake from sleep
 - Deleted videos removed from all lists (VideoList, ChannelDetail, Search) via `AppRouter.deletedVideoIds` + `.onChange` observers — no full reload needed
 - Watched state synced across screens via `AppRouter.watchedChanges: [String: Bool]` + `.onChange` observers
 - Pagination deduplication — `loadMoreIfNeeded` filters out already-loaded items by `youtubeId` to prevent duplicates from API drift
@@ -71,13 +71,13 @@ DI/        → DependencyContainer (manual singleton)
 - Filter-aware list updates — `removeIfFilterMismatch()` removes videos from list when watched state no longer matches active `watchFilter`
 
 **ViewModel lifecycle in NavigationStack:**
-- Each route in `TAClientApp.swift` uses a thin wrapper `<Feature>Screen` (e.g. `VideoDetailScreen`, `ChannelDetailScreen`, `PlaylistDetailScreen`, `VideoListScreen`, `SearchScreen`, `DownloadQueueScreen`, `PlaylistListScreen`, `SettingsScreen`, `LoginScreen`) instead of constructing the VM inline
+- Each route in `FoldApp.swift` uses a thin wrapper `<Feature>Screen` (e.g. `VideoDetailScreen`, `ChannelDetailScreen`, `PlaylistDetailScreen`, `VideoListScreen`, `SearchScreen`, `DownloadQueueScreen`, `PlaylistListScreen`, `SettingsScreen`, `LoginScreen`) instead of constructing the VM inline
 - Wrapper signature: `init(make: () -> VM)` storing the result via `_viewModel = State(wrappedValue: make())`
 - Why: SwiftUI re-evaluates the `navigationDestination` closure (and any container body) on every parent body re-render. An inline `viewModel: container.makeXVM()` constructs a new VM each re-eval, accumulating parallel VMs (confirmed bug — multiple `AVPlayer` instances saturating the connection pool, duplicate observers, `Buffer underrun` log lines fired 6× per event). The `@State`-stored wrapper persists the VM across re-evals tied to the same view identity — created once per push, torn down once per pop
 - Invariant: VM `init` must remain side-effect-free (no `Task`s, no observers, no `AVPlayer` allocation, no network calls). The `make` closure still runs on every body re-eval; only the FIRST result becomes `@State` storage and the rest are discarded. Side effects belong in `.task {}` / `.onAppear` / explicit lifecycle methods on the leaf view
-- Do NOT collapse the 9 named wrappers into a generic `VMOwningView<VM, Content>` — named types support per-screen `#Preview` blocks, the call site reads better in `TAClientApp.swift`, and the side-effect-free-init contract lives per-file as a comment near each wrapper for grep + code review
+- Do NOT collapse the 9 named wrappers into a generic `VMOwningView<VM, Content>` — named types support per-screen `#Preview` blocks, the call site reads better in `FoldApp.swift`, and the side-effect-free-init contract lives per-file as a comment near each wrapper for grep + code review
 - Do NOT swap the explicit closure for `@autoclosure` — the explicit braces at the call site (`VideoDetailScreen { container.makeVideoDetailViewModel(videoId: videoId) }`) signal that construction is deferred and make the throwaway-init invariant visible at every use site
-- Test coverage: `TAClientTests/WrapperLifecycleTests.swift` — factory-counting tests for each wrapper assert the factory closure is invoked exactly once per init (catches regressions where someone moves construction outside `_viewModel = State(wrappedValue: make())`, e.g. introducing a stored property `let viewModel = make()`)
+- Test coverage: `FoldTests/WrapperLifecycleTests.swift` — factory-counting tests for each wrapper assert the factory closure is invoked exactly once per init (catches regressions where someone moves construction outside `_viewModel = State(wrappedValue: make())`, e.g. introducing a stored property `let viewModel = make()`)
 
 ## Video List Features
 
@@ -138,7 +138,7 @@ Stable-scroll polling contract — the list must not "jump to the top" during ac
 - `Localizable.xcstrings` — 5 error strings (en + ru)
 
 **Keychain sharing:**
-- Shared access group: `5AS4WKH94K.ru.mzhukov.TAClient` (both main app and extension entitlements)
+- Shared access group: `LUZS336ZHP.com.jacobcampbell.ta-client` (both main app and extension entitlements)
 - `KeychainService` uses `kSecAttrAccessGroup` on all queries via `baseQuery(for:)`
 - Extension reads credentials directly via `SecItemCopyMatching` with same service/account/accessGroup
 
@@ -208,7 +208,7 @@ Two player paths, selected automatically by `CodecSupport.requiredPlayer(for:)`:
 
 **Background audio + lock screen:**
 - `ObserverBag` (`Presentation/VideoDetail/`) — thread-safe nonisolated bag that owns KVO + NotificationCenter tokens registered during AVPlayer setup. Lets `VideoDetailViewModel`'s nonisolated Swift 6 `deinit` tear observers down without a MainActor hop (both `NSKeyValueObservation.invalidate()` and `NotificationCenter.removeObserver(_:)` are thread-safe). `stopPlayback()` calls `tearDown()` on the normal path; `deinit` calls it again as a safety net (idempotent).
-- `PlayerSessionCoordinator` (`Presentation/VideoDetail/`) — `@MainActor` class owning `AVAudioSession` activation + the three notification observers (interruption, routeChange, mediaServicesWereReset). VM wires callbacks (`onInterruptionBegan/Ended`, `onHeadphonesUnplugged`, `onAirPlayBecameActive`, `onMediaServicesReset`) in `startAVPlayback` and calls `coordinator.start()`; `stopPlayback` calls `coordinator.stop()` which deactivates the session with `.notifyOthersOnDeactivation` so Music/Podcasts resume. Category `.playback`/`.moviePlayback` is set once at `TAClientApp.init`; activation is deferred until playback actually starts.
+- `PlayerSessionCoordinator` (`Presentation/VideoDetail/`) — `@MainActor` class owning `AVAudioSession` activation + the three notification observers (interruption, routeChange, mediaServicesWereReset). VM wires callbacks (`onInterruptionBegan/Ended`, `onHeadphonesUnplugged`, `onAirPlayBecameActive`, `onMediaServicesReset`) in `startAVPlayback` and calls `coordinator.start()`; `stopPlayback` calls `coordinator.stop()` which deactivates the session with `.notifyOthersOnDeactivation` so Music/Podcasts resume. Category `.playback`/`.moviePlayback` is set once at `FoldApp.init`; activation is deferred until playback actually starts.
 - `NowPlayingController` (AVPlayer-only for now) — populates `MPNowPlayingInfoCenter` with title/artist/duration/elapsed/rate/artwork (loaded via `ImageCache`), registers targets on `MPRemoteCommandCenter.shared()` for play/pause/togglePlayPause/skipForward/skipBackward/changePlaybackPosition. `nextTrackCommand`/`previousTrackCommand` are explicitly disabled. Handlers return `MPRemoteCommandHandlerStatus` explicitly. VM calls `nowPlaying?.refresh()` from the 1s UI observer, after SponsorBlock skips, after interruption resume, and on `AVPlayerItemDidPlayToEndTime`. Controller is rebuilt when `sponsorBlockSettings.seekInterval` changes (triggered from `VideoDetailView` via `.onChange`). VLC Now Playing is future work.
 - **AVPlayer error observation**: `AVPlayerItem.status` KVO + `AVPlayerItemFailedToPlayToEndTime` + `AVPlayerItemDidPlayToEndTime` notification observers feed `VideoDetailViewModel.handlePlaybackFailure(message:)` / `handleDidPlayToEnd()`. Failure sets `playbackError` (distinct from `errorMessage` which covers initial load) and returns to thumbnail + Retry button; end-of-playback forces a final `saveProgress` with `position == duration`.
 - **Background continuation invariant** (load-bearing for App Store): `AVPlayer.audiovisualBackgroundPlaybackPolicy = .continuesIfPossible` plus `AVPlayerViewController.canStartPictureInPictureAutomaticallyFromInline = true` and `allowsPictureInPicturePlayback = true`. Without `.continuesIfPossible` iOS suspends the app within ~5s of backgrounding even though the audio session is `.playback`. The policy must travel with the player on every swap — applied in both `makeUIViewController` and `updateUIViewController` (when `controller.player !== player`) via the `AVPlayerView.applyPlayerConfig(_:)` helper. Do NOT inline the assignment in only one path; the player swap path matters when the VM rebuilds the player after stop/start.
@@ -295,7 +295,7 @@ Two player paths, selected automatically by `CodecSupport.requiredPlayer(for:)`:
 - **`[Mem]` and `[Restart]` are PERMANENT** — NOT part of the v0.9.1 cleanup bucket. The `[Mem]` markers (emitted by `VideoCachePreloader.handleMemoryPressure`, `downloadVideo` start/complete, and `VideoDetailViewModel.startAVPlayback` + `logCacheHealth`) capture resident-memory snapshots at the key inflection points used by the memory-pressure recovery contract (`fix-memory-pressure-recovery`); the `[Restart]` marker (emitted by `VideoCachePreloader.restartPreloadIfNeeded`) records the 1Hz-observer-driven preload restart after `.critical` trims. Both are operational telemetry for diagnosing memory regressions in production and stay in shipping logs.
 
 **Test-only seams (PERMANENT — separate category, NOT in the v0.9.1 cleanup bucket):**
-- `VideoDetailViewModel.setDirectAssetState(_:)` — internal setter exposed via `@testable import TAClient` so `ReseedDispatchEvaluationTests` can flip `isUsingDirectAsset` without wiring a real AirPlay session. Writes under `progressStateLock` to match the production contract.
+- `VideoDetailViewModel.setDirectAssetState(_:)` — internal setter exposed via `@testable import Fold` so `ReseedDispatchEvaluationTests` can flip `isUsingDirectAsset` without wiring a real AirPlay session. Writes under `progressStateLock` to match the production contract.
 - `VideoDetailViewModel.snapshotPlaybackContext(...)` and `evaluateReseedDispatch(...)` are `internal` (not `private`) for the same reason — direct test access via `@testable import` avoids the need for a shim layer.
 - Treat these as a permanent test-API surface, not as diagnostic instrumentation. Rename only with a corresponding test update; do not remove during diagnostic-instrumentation cleanup.
 

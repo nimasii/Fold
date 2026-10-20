@@ -74,7 +74,7 @@
     A00000000000000000000008 = {
       isa = PBXFileSystemSynchronizedRootGroup;
       exceptions = (A0000000000000000000000E);
-      path = TAClient;
+      path = Fold;
       sourceTree = "<group>";
     };
     A0000000000000000000000A = {
@@ -98,7 +98,7 @@
     A0000000000000000000000E = {
       isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
       membershipExceptions = (
-        TAClientApp.swift,
+        FoldApp.swift,
         Info.plist,
         Presentation/VideoDetail/VLCPlayerView.swift,
         Presentation/VideoDetail/VLCPlayerControls.swift,

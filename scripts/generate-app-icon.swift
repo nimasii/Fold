@@ -17,7 +17,7 @@ func color(_ hex: String) -> CGColor {
     return CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, components: [
         CGFloat((n >> 16) & 255) / 255, CGFloat((n >> 8) & 255) / 255, CGFloat(n & 255) / 255, 1])!
 }
-let asset = URL(fileURLWithPath: "TAClient/Assets.xcassets/AppIcon.appiconset", isDirectory: true)
+let asset = URL(fileURLWithPath: "Fold/Assets.xcassets/AppIcon.appiconset", isDirectory: true)
 for p in palettes {
     let context = CGContext(data: nil, width: 1024, height: 1024, bitsPerComponent: 8,
         bytesPerRow: 4096, space: CGColorSpace(name: CGColorSpace.sRGB)!,

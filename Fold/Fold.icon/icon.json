@@ -1,0 +1,39 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.10588,0.11373,0.12157,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "04-ribbon-front.svg",
+          "name": "04-ribbon-front"
+        },
+        {
+          "image-name": "03-bookmark-fold.svg",
+          "name": "03-bookmark-fold"
+        },
+        {
+          "image-name": "02-ribbon-return.svg",
+          "name": "02-ribbon-return"
+        },
+        {
+          "image-name": "01-ribbon-back.svg",
+          "name": "01-ribbon-back"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.15
+      },
+      "name": "Folded play ribbon"
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
+  }
+}
