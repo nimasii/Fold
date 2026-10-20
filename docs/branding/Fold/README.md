@@ -12,6 +12,8 @@ The foreground taper and lower return share the same straight baseline, from `(4
 
 The lower triangle and red bookmark meet at the same top `(405,628)` and bottom `(405,831)` vertices. Lowering the triangle's left top by 16 SVG pixels removes the step above the bookmark; its accepted lower-right baseline remains unchanged. Default and Dark retain the original shared palette.
 
+The upright layer now keeps a straight vertical edge to `(405,628)`, removing its rounded inward hook at the bookmark junction. The front layer's upper corner uses a circular SVG arc (radius `84.858277931`) tangent to both the vertical side and the unchanged top diagonal. This removes the former curve-to-line angle break. The `light/dark-bookmark-detail.png` and `light/dark-upper-detail.png` files are enlarged crops of native renders for inspecting these two junctions.
+
 ## Identity and build migration
 
 The app, source folders, Xcode project, targets and primary scheme are named Fold. Bundle identifiers, Keychain service/access group, signing team/profiles, notification identifiers, offline storage and the existing App Store Connect app remain unchanged.
