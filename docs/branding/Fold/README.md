@@ -6,6 +6,10 @@ The charcoal background, native specular edges, neutral shadows and 15% transluc
 
 `icon-default.png`, `icon-dark.png` and `icon-tinted.png` are native Icon Composer exports for review and documentation. `FoldMark.imageset` uses the Default/Dark exports only for the small in-app brand mark; the installed app icon uses the layered `.icon` document.
 
+## Seam alignment
+
+The foreground taper and lower return share the same straight baseline, from `(405,831)` to `(817,593)`. Their edge endpoints and tangent controls align to that line, so the bottom-right fold meets the triangle without a protruding tip. Both the native asset and the editable source copies use this geometry. `icon-light-64.png` and `icon-dark-64.png` are native Icon Composer renders at small icon size.
+
 ## Identity and build migration
 
 The app, source folders, Xcode project, targets and primary scheme are named Fold. Bundle identifiers, Keychain service/access group, signing team/profiles, notification identifiers, offline storage and the existing App Store Connect app remain unchanged.
