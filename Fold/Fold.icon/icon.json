@@ -1,39 +1,67 @@
 {
-  "fill": {
-    "automatic-gradient": "extended-srgb:0.10588,0.11373,0.12157,1.00000"
+  "fill" : {
+    "automatic-gradient" : "extended-srgb:0.10588,0.11373,0.12157,1.00000"
   },
-  "groups": [
+  "groups" : [
     {
-      "layers": [
+      "layers" : [
         {
-          "image-name": "04-ribbon-front.svg",
-          "name": "04-ribbon-front"
+          "image-name" : "04-ribbon-front.svg",
+          "name" : "04-ribbon-front",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -12,
+              23.092447988018193
+            ]
+          }
         },
         {
-          "image-name": "03-bookmark-fold.svg",
-          "name": "03-bookmark-fold"
+          "image-name" : "03-bookmark-fold.svg",
+          "name" : "03-bookmark-fold",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -12,
+              23.092447988018193
+            ]
+          }
         },
         {
-          "image-name": "02-ribbon-return.svg",
-          "name": "02-ribbon-return"
+          "image-name" : "02-ribbon-return.svg",
+          "name" : "02-ribbon-return",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -12,
+              23.092447988018193
+            ]
+          }
         },
         {
-          "image-name": "01-ribbon-back.svg",
-          "name": "01-ribbon-back"
+          "image-name" : "01-ribbon-back.svg",
+          "name" : "01-ribbon-back",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -12,
+              23.092447988018193
+            ]
+          }
         }
       ],
-      "shadow": {
-        "kind": "neutral",
-        "opacity": 0.5
+      "name" : "Folded play ribbon",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
       },
-      "translucency": {
-        "enabled": true,
-        "value": 0.15
-      },
-      "name": "Folded play ribbon"
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.15
+      }
     }
   ],
-  "supported-platforms": {
-    "squares": "shared"
+  "supported-platforms" : {
+    "squares" : "shared"
   }
 }
