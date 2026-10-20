@@ -10,6 +10,8 @@ The charcoal background, native specular edges, neutral shadows and 15% transluc
 
 The foreground taper and lower return share the same straight baseline, from `(405,831)` to `(817,593)`. Their edge endpoints and tangent controls align to that line, so the bottom-right fold meets the triangle without a protruding tip. Both the native asset and the editable source copies use this geometry. `icon-light-64.png` and `icon-dark-64.png` are native Icon Composer renders at small icon size.
 
+The lower triangle and red bookmark meet at the same top `(405,628)` and bottom `(405,831)` vertices. Lowering the triangle's left top by 16 SVG pixels removes the step above the bookmark; its accepted lower-right baseline remains unchanged. Default and Dark retain the original shared palette.
+
 ## Identity and build migration
 
 The app, source folders, Xcode project, targets and primary scheme are named Fold. Bundle identifiers, Keychain service/access group, signing team/profiles, notification identifiers, offline storage and the existing App Store Connect app remain unchanged.
