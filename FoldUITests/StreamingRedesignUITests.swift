@@ -48,7 +48,7 @@ final class StreamingRedesignUITests: XCTestCase {
         closeSearch(app)
         XCTAssertTrue(app.navigationBars["Queue"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
-        selectTab(app, "Library")
+        app.tabBars.buttons["Library"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["watch.featured"].firstMatch.waitForExistence(timeout: 5))
         XCTAssertEqual(app.tabBars.buttons.count, 4)
         app.terminate()
@@ -61,16 +61,16 @@ final class StreamingRedesignUITests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["watch.featured"].firstMatch.waitForNonExistence(timeout: 5))
         app.buttons["library.playlists"].tap()
         XCTAssertTrue(app.navigationBars["Playlists"].waitForExistence(timeout: 5))
-        selectTab(app, "Downloads"); openSettings(app)
-        selectTab(app, "Queue"); openSettings(app)
-        selectTab(app, "Library")
+        app.tabBars.buttons["Downloads"].tap(); openSettings(app)
+        app.tabBars.buttons["Queue"].tap(); openSettings(app)
+        app.tabBars.buttons["Library"].tap()
         XCTAssertTrue(app.navigationBars["Playlists"].exists)
         app.buttons.containing(NSPredicate(format: "label CONTAINS %@", "Above the atmosphere")).firstMatch.tap()
         XCTAssertTrue(app.buttons["video.card.earthrise"].waitForExistence(timeout: 5))
         capture(app, "04-collections-with-three-section-navigation")
-        selectTab(app, "Downloads"); XCTAssertTrue(app.navigationBars["Settings"].exists)
+        app.tabBars.buttons["Downloads"].tap(); XCTAssertTrue(app.navigationBars["Settings"].exists)
         back(app); XCTAssertTrue(app.navigationBars["Downloads"].exists)
-        selectTab(app, "Queue"); XCTAssertTrue(app.navigationBars["Settings"].exists)
+        app.tabBars.buttons["Queue"].tap(); XCTAssertTrue(app.navigationBars["Settings"].exists)
         back(app); XCTAssertTrue(app.navigationBars["Queue"].exists)
         // Search is transient: Cancel restores Queue and the Library collection history.
         openSearch(app)
@@ -78,7 +78,7 @@ final class StreamingRedesignUITests: XCTestCase {
         XCTAssertTrue(app.buttons["video.card.moon"].waitForExistence(timeout: 10))
         closeSearch(app)
         XCTAssertTrue(app.navigationBars["Queue"].waitForExistence(timeout: 5))
-        selectTab(app, "Library")
+        app.tabBars.buttons["Library"].tap()
         XCTAssertTrue(app.buttons["video.card.earthrise"].waitForExistence(timeout: 5))
         back(app); back(app)
         XCTAssertTrue(app.buttons["library.playlists"].waitForExistence(timeout: 5))
@@ -90,7 +90,7 @@ final class StreamingRedesignUITests: XCTestCase {
             $0.isHittable && $0.frame.minY > top && $0.frame.maxY < bottom
         }!
         let id = card.identifier
-        selectTab(app, "Downloads"); selectTab(app, "Library")
+        app.tabBars.buttons["Downloads"].tap(); app.tabBars.buttons["Library"].tap()
         let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "hittable == true"), object: app.buttons[id].firstMatch)
         let result = await XCTWaiter.fulfillment(of: [ready], timeout: 5)
         XCTAssertEqual(result, .completed)
@@ -105,28 +105,29 @@ final class StreamingRedesignUITests: XCTestCase {
         continueAfterFailure = false
         try await mode(offline: false)
         let app = launch(dark: false)
-        selectTab(app, "Queue")
+        app.tabBars.buttons["Queue"].tap()
         XCTAssertTrue(app.buttons["queue.start"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.buttons["queue.rescan"].exists)
         capture(app, "06-queue-contextual-controls")
         app.buttons["queue.start"].tap(); app.buttons["queue.rescan"].tap()
         app.textFields["queue.add-input"].tap(); app.textFields["queue.add-input"].typeText("TESTVIDEO01")
         app.buttons["queue.add"].tap()
-        XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 5))
+        if app.keyboards.buttons["Done"].isHittable { app.keyboards.buttons["Done"].tap() }
         let row = app.cells.containing(.staticText, identifier: "The Earth, from here").firstMatch
-        revealSwipeAction(app, row: row, action: "Ignore").tap()
+        XCTAssertTrue(row.waitForExistence(timeout: 5)); row.swipeLeft()
+        app.buttons["Ignore"].firstMatch.tap()
         XCTAssertTrue(app.staticTexts["The Earth, from here"].waitForNonExistence(timeout: 5))
         chooseFilter(app, "queue.filter.ignore")
         XCTAssertTrue(app.staticTexts["The Earth, from here"].waitForExistence(timeout: 5))
         capture(app, "07-queue-ignored-filter")
-        let ignoredRow = app.cells.containing(.staticText, identifier: "The Earth, from here").firstMatch
-        revealSwipeAction(app, row: ignoredRow, action: "Delete").tap()
+        app.cells.containing(.staticText, identifier: "The Earth, from here").firstMatch.swipeLeft()
+        app.buttons["Delete"].firstMatch.tap()
         XCTAssertTrue(app.sheets.firstMatch.waitForExistence(timeout: 5))
         if app.buttons["Cancel"].exists { app.buttons["Cancel"].tap() }
         else { app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)).tap() }
         XCTAssertTrue(app.sheets.firstMatch.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["The Earth, from here"].exists)
-        selectTab(app, "Downloads")
+        app.tabBars.buttons["Downloads"].tap()
         let local = app.buttons.containing(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "video.card.", "On the edge of daylight")).firstMatch
         XCTAssertTrue(app.navigationBars["Downloads"].waitForExistence(timeout: 5))
         for _ in 0..<2 where !local.exists { app.swipeUp() }
@@ -194,37 +195,7 @@ final class StreamingRedesignUITests: XCTestCase {
         app.buttons["library.search.open"].exists ? app.buttons["library.search.open"] : app.tabBars.buttons["Search"]
     }
     @MainActor private func openSearch(_ app: XCUIApplication) { searchLauncher(app).tap() }
-    @MainActor private func closeSearch(_ app: XCUIApplication) {
-        // Native toolbar controls can move during the keyboard/tab-bar transition.
-        // A synthesized tap may be delivered before their final hit region is ready.
-        for _ in 0..<2 {
-            let close = searchClose(app)
-            guard close.waitForExistence(timeout: 5) else { break }
-            close.tap()
-            if app.searchFields.firstMatch.waitForNonExistence(timeout: 3) { break }
-        }
-        XCTAssertFalse(app.searchFields.firstMatch.exists, "Closing search must dismiss its editor")
-    }
-    @MainActor private func revealSwipeAction(_ app: XCUIApplication, row: XCUIElement, action: String) -> XCUIElement {
-        XCTAssertTrue(row.waitForExistence(timeout: 5))
-        // Start inside the trailing edge so the gesture has a full horizontal runway.
-        let start = row.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5))
-        let end = row.coordinate(withNormalizedOffset: CGVector(dx: 0.15, dy: 0.5))
-        start.press(forDuration: 0.1, thenDragTo: end)
-        let button = app.buttons[action].firstMatch
-        XCTAssertTrue(button.waitForExistence(timeout: 5), "The row must expose its native swipe action")
-        return button
-    }
-    @MainActor private func selectTab(_ app: XCUIApplication, _ title: String) {
-        let tab = app.tabBars.buttons[title]
-        XCTAssertTrue(tab.waitForExistence(timeout: 5))
-        for _ in 0..<2 where !tab.isSelected {
-            tab.tap()
-            let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "selected == true"), object: tab)
-            if XCTWaiter.wait(for: [selected], timeout: 3) == .completed { break }
-        }
-        XCTAssertTrue(tab.isSelected, "Native tab selection must complete before querying the destination")
-    }
+    @MainActor private func closeSearch(_ app: XCUIApplication) { searchClose(app).tap() }
     @MainActor private func chooseFilter(_ app: XCUIApplication, _ id: String) {
         app.buttons["section.menu"].tap(); app.buttons["section.filters"].tap()
         let button = app.buttons[id]

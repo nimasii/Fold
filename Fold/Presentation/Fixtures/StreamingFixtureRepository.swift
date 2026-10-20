@@ -28,15 +28,11 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
         Playlist(playlistId: "orbital", playlistName: "Above the atmosphere", playlistChannel: "Orbital Journal", playlistChannelId: "channel-orbital-journal", playlistType: .regular, playlistSubscribed: true, playlistThumbnail: base + "/art/orbit.jpg", playlistDescription: "An illustrative collection in the preview library.", playlistEntries: [PlaylistEntry(youtubeId: "earthrise", title: "The Earth, from here", uploader: "Orbital Journal", idx: 0, downloaded: true), PlaylistEntry(youtubeId: "orbit", title: "On the edge of daylight", uploader: "Orbital Journal", idx: 1, downloaded: true)]),
         Playlist(playlistId: "lunar", playlistName: "Quiet worlds", playlistChannel: "Personal collection", playlistChannelId: "", playlistType: .custom, playlistSubscribed: false, playlistThumbnail: base + "/art/moon.jpg", playlistDescription: "An illustrative collection in the preview library.", playlistEntries: [PlaylistEntry(youtubeId: "moon", title: "A world of ancient shadows", uploader: "Lunar Notes", idx: 0, downloaded: true)])
     ]
-    private(set) var downloads: [DownloadItem] = {
-        [("earthrise", "The Earth, from here", "Orbital Journal", "pending"),
-         ("moon", "A world of ancient shadows", "Lunar Notes", "pending"),
-         ("apollo", "The first Earthrise", "Lunar Notes", "ignore")].enumerated().compactMap { index, item in
-            DownloadMapper.map(DownloadItemDTO(youtubeId: item.0, title: item.1, channelName: item.2,
-                channelId: "", duration: "0:12", published: "2026-10-17", status: item.3, message: nil,
-                vidThumbUrl: "art/" + item.0 + ".jpg", vidType: "videos", timestamp: index), serverURL: base + "/")
-        }
-    }()
+    private(set) var downloads: [DownloadItem] = [
+        DownloadItem(youtubeId: "earthrise", title: "The Earth, from here", channelName: "Orbital Journal", channelId: "channel-orbital-journal", duration: "0:12", published: "Oct 17", status: "pending", message: nil, thumbUrl: base + "/art/earthrise.jpg", vidType: "videos", timestamp: 1),
+        DownloadItem(youtubeId: "moon", title: "A world of ancient shadows", channelName: "Lunar Notes", channelId: "channel-lunar-notes", duration: "0:12", published: "Oct 17", status: "pending", message: nil, thumbUrl: base + "/art/moon.jpg", vidType: "videos", timestamp: 2),
+        DownloadItem(youtubeId: "apollo", title: "The first Earthrise", channelName: "Lunar Notes", channelId: "channel-lunar-notes", duration: "0:12", published: "Oct 17", status: "ignore", message: nil, thumbUrl: base + "/art/apollo.jpg", vidType: "videos", timestamp: 3)
+    ]
     private var subscriptions: [String: Bool] = [:]
 
     func getVideos(page: Int, sort: String, order: String, watch: String?, channel: String?, vidType: String?) async throws -> VideoListResult {

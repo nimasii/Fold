@@ -19,9 +19,8 @@ enum VideoMapper {
             downloadedShort: DateFormatting.formatUnixTimestamp(dto.dateDownloaded, style: .short),
             channelName: dto.channel?.channelName ?? "",
             channelId: dto.channel?.channelId ?? "",
-            channelThumbUrl: ServerArtwork.resolve(dto.channel?.channelThumbUrl, baseURL: baseURL),
-            thumbUrl: ServerArtwork.resolve(dto.vidThumbUrl, baseURL: baseURL)
-                ?? ServerArtwork.videoFallbacks(youtubeId, baseURL: baseURL).first ?? "",
+            channelThumbUrl: resolveURL(dto.channel?.channelThumbUrl, baseURL: baseURL),
+            thumbUrl: resolveURL(dto.vidThumbUrl, baseURL: baseURL) ?? "",
             mediaUrl: resolveURL(dto.mediaUrl, baseURL: baseURL) ?? "",
             duration: dto.player?.duration ?? 0,
             durationStr: dto.player?.durationStr ?? "0:00",

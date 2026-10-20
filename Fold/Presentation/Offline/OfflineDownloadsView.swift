@@ -114,22 +114,21 @@ struct OfflineDownloadsView: View {
     }
 
     private var deviceHeader: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(String(localized: "stream_on_device")).font(.subheadline.weight(.semibold))
-                Text(library.totalSize).font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(String(localized: "stream_on_device"), systemImage: "iphone")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Text(library.totalSize).font(.subheadline).foregroundStyle(.secondary)
             }
-            Spacer()
+            Text(String(localized: "offline_private_help")).font(.footnote).foregroundStyle(.secondary)
             Button { showInfo = true } label: {
-                Image(systemName: "info.circle").frame(width: 44, height: 44)
-            }
-            .accessibilityLabel(String(localized: "offline_info"))
-            .accessibilityIdentifier("downloads.info")
-        }
-        .padding(12)
-        .background(Color(.secondarySystemBackground), in: .rect(cornerRadius: 16))
-        .padding(.horizontal, StreamingStyle.gutter)
+                Label(String(localized: "offline_info"), systemImage: "info.circle")
+            }.font(.subheadline).frame(minHeight: 44)
+                .accessibilityLabel(String(localized: "offline_info"))
+                .accessibilityIdentifier("downloads.info")
+            Divider()
+        }.padding(.horizontal, StreamingStyle.gutter)
     }
 
     private func artwork(_ record: OfflineRecord) -> LocalVideoArtwork {
@@ -138,15 +137,8 @@ struct OfflineDownloadsView: View {
 
     private func transferRow(_ record: OfflineRecord) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                Color(.tertiarySystemBackground).frame(width: 112, height: 63)
-                    .overlay { AuthenticatedAsyncImage(url: nil, localFileURL: library.thumbnailURL(record.id), localRevision: library.artworkRevision) }
-                    .clipShape(.rect(cornerRadius: 8)).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(record.title).font(.headline)
-                    Text(record.status.label).font(.subheadline).foregroundStyle(.secondary)
-                }
-            }
+            Text(record.title).font(.headline)
+            Text(record.status.label).font(.subheadline).foregroundStyle(.secondary)
             if record.status.isActive {
                 ProgressView(value: record.status == .preparing ? record.attempt.flatMap { library.preparationProgress[$0] } : (record.totalBytes > 0 ? min(1, Double(record.bytes) / Double(record.totalBytes)) : nil))
                     .accessibilityLabel(String(localized: "offline_progress"))

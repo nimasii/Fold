@@ -39,8 +39,8 @@ extension DataLayerSuite {
         HTTPURLResponse(url: base.appendingPathComponent("video.mp4"), statusCode: code, httpVersion: nil,
                         headerFields: ["Content-Length": String(size), "Content-Type": mime])!
     }
-    @discardableResult private func ready(_ library: OfflineLibrary, youtubeID: String = "test-video-id") async throws -> OfflineRecord {
-        let id = try #require(library.enqueue(TestData.video(youtubeId: youtubeID, duration: 2)))
+    @discardableResult private func ready(_ library: OfflineLibrary) async throws -> OfflineRecord {
+        let id = try #require(library.enqueue(TestData.video(duration: 2)))
         let pending = try #require(library.records.first { $0.id == id })
         let file = try staged(library)
         let size = try Data(contentsOf: file).count
@@ -443,57 +443,6 @@ extension DataLayerSuite {
         #expect(try Data(contentsOf: #require(restored.localURL(for: record))) == before)
         await restored.ensureArtwork(record.id, using: repository)
         #expect(reads == 1 && requests.urls.count == 2)
-    }
-
-    @Test @MainActor func missingLegacyMetadataRecoversServerCacheWithoutReplacingMedia() async throws {
-        MockResponse.tearDown(); defer { MockResponse.tearDown() }
-        let (original, state, root) = make()
-        var record = try await ready(original, youtubeID: "Abc123_xY-z")
-        original.pauseAll(); record.metadata = nil
-        try original.disk?.save([record])
-        let library = OfflineLibrary(authState: state, root: root, configuration: MockResponse.makeConfiguration())
-        defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
-        let media = try #require(library.localURL(for: record)); let before = try Data(contentsOf: media)
-        let data = try artworkData(); let requests = ArtworkRequestLog()
-        MockURLProtocol.requestHandler = { request in
-            requests.append(request.url!)
-            #expect(request.url?.host == "example.com")
-            #expect(request.value(forHTTPHeaderField: "Authorization") == "Token DUMMY_AUTH_SECRET")
-            let cached = request.url?.path == "/cache/videos/a/Abc123_xY-z.jpg"
-            return (HTTPURLResponse(url: request.url!, statusCode: cached ? 200 : 404, httpVersion: nil, headerFields: [:])!, cached ? data : Data())
-        }
-        let repository = MockVideoRepository()
-        repository.getVideoHandler = { _ in throw AppError.serverError(statusCode: 404, message: nil) }
-        await library.ensureArtwork(record.id, using: repository)
-        #expect(requests.urls.map(\.path) == ["/media/thumb/video/Abc123_xY-z.jpg", "/cache/videos/a/Abc123_xY-z.jpg"])
-        #expect(library.thumbnailURL(record.id) != nil)
-        #expect(try Data(contentsOf: media) == before)
-        let signedOut = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)
-        let restored = OfflineLibrary(authState: signedOut, root: root)
-        #expect(restored.thumbnailURL(record.id) != nil && restored.records.first?.status == .ready)
-    }
-
-    @Test @MainActor func staleArtworkPathsRefreshMetadataWithoutReplacingReadyMedia() async throws {
-        MockResponse.tearDown(); defer { MockResponse.tearDown() }
-        let (library, _, root, record) = try await repairableCopy(legacy: false)
-        defer { library.pauseAll(); try? FileManager.default.removeItem(at: root) }
-        let media = try #require(library.localURL(for: record)); let before = try Data(contentsOf: media)
-        let data = try artworkData()
-        MockURLProtocol.requestHandler = { request in
-            let fresh = request.url!.path.hasPrefix("/new-")
-            return (HTTPURLResponse(url: request.url!, statusCode: fresh ? 200 : 404, httpVersion: nil, headerFields: [:])!, fresh ? data : Data())
-        }
-        let repository = MockVideoRepository(); var reads = 0
-        repository.getVideoHandler = { _ in
-            reads += 1
-            return videoWithArtwork("https://example.com/new-thumbnail.png", channel: "https://example.com/new-channel.png")
-        }
-        await library.ensureArtwork(record.id, using: repository)
-        #expect(reads == 1)
-        #expect(library.thumbnailURL(record.id) != nil && library.channelArtworkURL(record.id) != nil)
-        #expect(library.records.first?.metadata?.thumbnailPath == "/new-thumbnail.png")
-        #expect(library.records.first?.status == .ready)
-        #expect(try Data(contentsOf: media) == before)
     }
 
     @Test @MainActor func corruptThumbnailIsRepairedWithoutReplacingGoodAvatarOrVideo() async throws {

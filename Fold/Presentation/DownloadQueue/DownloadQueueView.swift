@@ -118,7 +118,7 @@ struct DownloadQueueView: View {
             }
             // Opaque chrome background so scrolled List content doesn't show through the
             // inset region; the filter keeps its own stable height.
-            .background(StreamingStyle.background, ignoresSafeAreaEdges: [])
+            .background(StreamingStyle.background)
         }
         // Animate the banner/error inset appearing/disappearing on batch start/finish.
         .animation(reduceMotion ? nil : .default, value: viewModel.downloadProgress.isEmpty)
@@ -163,7 +163,7 @@ struct DownloadQueueView: View {
                 }
                 .padding(.horizontal)
                 .padding(.vertical, 8)
-                .background(StreamingStyle.background, ignoresSafeAreaEdges: [])
+                .background(StreamingStyle.background)
             }
         }
         .confirmationDialog(String(localized: "download_action_delete"), isPresented: Binding(
@@ -176,7 +176,7 @@ struct DownloadQueueView: View {
         } message: { if let item = pendingDeletion { Text(item.title) } }
         .background(StreamingStyle.background)
         .navigationTitle(String(localized: "nav_queue"))
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 SectionMenu {
@@ -250,11 +250,10 @@ struct DownloadQueueView: View {
 private struct DownloadItemRow: View {
     let item: DownloadItem
     @Environment(\.dynamicTypeSize) private var typeSize
-    @Environment(AuthState.self) private var authState
 
     var body: some View {
         HStack(spacing: 12) {
-            AuthenticatedAsyncImage(url: item.thumbUrl, fallbackURLs: ServerArtwork.videoFallbacks(item.youtubeId, baseURL: authState.serverURL ?? ""))
+            AuthenticatedAsyncImage(url: item.thumbUrl)
                 .frame(width: typeSize.isAccessibilitySize ? 72 : 112, height: typeSize.isAccessibilitySize ? 72 : 64)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
 

@@ -5,7 +5,6 @@ struct AuthenticatedAsyncImage: View {
     var placeholderColor: Color = Color(.secondarySystemBackground)
     var localFileURL: URL? = nil
     var localRevision = 0
-    var fallbackURLs: [String] = []
     @Environment(AuthState.self) private var authState
     @State private var image: UIImage?
     @State private var loadTask: Task<Void, Never>?
@@ -55,18 +54,16 @@ struct AuthenticatedAsyncImage: View {
             }
         }
         #else
-        guard image == nil else { return }
-        let candidates = ([url].compactMap { $0 } + fallbackURLs).filter { !$0.isEmpty }
+        guard image == nil,
+              let urlString = url,
+              !urlString.isEmpty,
+              let imageURL = URL(string: urlString) else { return }
+
         loadTask?.cancel()
         loadTask = Task {
-            var attempted = Set<String>()
-            for candidate in candidates where attempted.insert(candidate).inserted {
-                guard !Task.isCancelled, let imageURL = URL(string: candidate) else { return }
-                if let loaded = await ImageCache.shared.image(for: imageURL, token: authState.token, authorization: authState.authorization) {
-                    guard !Task.isCancelled else { return }
-                    self.image = loaded
-                    return
-                }
+            let loaded = await ImageCache.shared.image(for: imageURL, token: authState.token, authorization: authState.authorization)
+            if !Task.isCancelled {
+                self.image = loaded
             }
         }
         #endif

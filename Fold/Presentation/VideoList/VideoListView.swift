@@ -23,6 +23,9 @@ struct VideoListView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 28) {
+                        if !viewModel.isSelecting {
+                            playlistsEntry
+                        }
                         if showsDiscovery, let featured = viewModel.videos.first {
                             FeaturedVideo(video: featured) { viewModel.navigateToVideo(featured.id) }
                             if !continuing.isEmpty {
@@ -32,7 +35,6 @@ struct VideoListView: View {
                             VideoShelf(title: String(localized: "stream_recent"), videos: Array(viewModel.videos.prefix(8)),
                                 onOpen: viewModel.navigateToVideo, onChannel: viewModel.navigateToChannel)
                         }
-                        if !viewModel.isSelecting { playlistsEntry }
                         MediaSectionHeading(title: String(localized: "stream_browse"),
                             subtitle: viewModel.watchFilter.label + " · " + viewModel.sortOption.label)
                         AdaptiveVideoGrid(

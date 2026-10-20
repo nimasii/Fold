@@ -34,7 +34,7 @@ nonisolated struct OfflineVideoMetadata: Codable, Hashable {
         channelArtworkPath = Self.artworkPath(video.channelThumbUrl, origin: origin)
     }
     private static func artworkPath(_ raw: String?, origin: String) -> String? {
-        guard let resolved = ServerArtwork.resolve(raw, baseURL: origin), let url = URL(string: resolved), RequestAuthorization.origin(url) == origin,
+        guard let raw, let url = URL(string: raw), RequestAuthorization.origin(url) == origin,
               url.user == nil, url.password == nil, url.query == nil, url.fragment == nil else { return nil }
         guard let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath,
               artworkURL(path: path, origin: origin) != nil else { return nil }
