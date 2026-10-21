@@ -4,7 +4,12 @@ import Foundation
 final class ChannelDetailViewModel {
     let channelId: String
     var channel: Channel?
-    var videos: [Video] = []
+    private var storedVideos: [Video] = []
+    private let playbackCoordinator: PlaybackCoordinator?
+    var videos: [Video] {
+        get { storedVideos.map { playbackCoordinator?.project($0) ?? $0 } }
+        set { storedVideos = newValue }
+    }
     var isLoading = true
     var isLoadingMore = false
     var errorMessage: String?
@@ -20,11 +25,12 @@ final class ChannelDetailViewModel {
     private let channelRepository: ChannelRepositoryProtocol
     private let videoRepository: VideoRepositoryProtocol
 
-    init(channelId: String, channelRepository: ChannelRepositoryProtocol, videoRepository: VideoRepositoryProtocol, router: AppRouter) {
+    init(channelId: String, channelRepository: ChannelRepositoryProtocol, videoRepository: VideoRepositoryProtocol, router: AppRouter, playbackCoordinator: PlaybackCoordinator? = nil) {
         self.channelId = channelId
         self.channelRepository = channelRepository
         self.videoRepository = videoRepository
         self.router = router
+        self.playbackCoordinator = playbackCoordinator
     }
 
     func loadChannel() async {

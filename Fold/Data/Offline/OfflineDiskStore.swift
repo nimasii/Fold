@@ -51,6 +51,21 @@ nonisolated final class OfflineDiskStore: @unchecked Sendable {
         guard let url = file(for: record), let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return false }
         return size > 0 && Int64(size) == record.bytes
     }
+    /// Selection validation does not alter the manifest or delete a damaged file.
+    func isValidPlaybackFile(_ record: OfflineRecord) -> Bool {
+        guard let url = file(for: record),
+              let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true,
+              let size = values.fileSize, size > 12, Int64(size) == record.bytes,
+              let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        let header = (try? handle.read(upToCount: 8)) ?? Data()
+        switch record.kind {
+        case .mp4: return header.count >= 8 && Array(header[4..<8]) == Array("ftyp".utf8)
+        case .webm: return header.starts(with: [0x1A, 0x45, 0xDF, 0xA3])
+        case nil: return false
+        }
+    }
     func checkCapacity(_ expected: Int64) throws {
         let values = try root.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         if let available = values.volumeAvailableCapacityForImportantUsage,

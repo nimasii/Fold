@@ -22,10 +22,17 @@ struct FoldApp: App {
                 .environment(container.router)
                 .environment(container.authState)
                 .environment(container.offlineLibrary)
-                .onChange(of: container.authState.authorization?.id) { container.offlineLibrary.authorizationChanged() }
+                .environment(\.playbackCoordinator, container.playbackCoordinator)
+                .onChange(of: container.authState.authorization?.id) {
+                    container.offlineLibrary.authorizationChanged()
+                    container.playbackCoordinator.connectionChanged()
+                }
+                .onChange(of: container.authState.playbackAccount) { container.playbackCoordinator.connectionChanged() }
+                .onChange(of: container.authState.accountConfirmed) { container.playbackCoordinator.requestSync() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .background { container.offlineLibrary.pauseAll() }
                     if phase == .active {
+                        container.playbackCoordinator.requestSync(force: true)
                         forceLayoutUpdate()
                     }
                 }

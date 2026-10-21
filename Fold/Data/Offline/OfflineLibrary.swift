@@ -64,12 +64,28 @@ final class OfflineLibrary {
     var totalSize: String { ByteCountFormatter.string(fromByteCount: records.filter { $0.status == .ready }.reduce(0) { $0 + $1.bytes }, countStyle: .file) }
     func record(for video: Video) -> OfflineRecord? {
         guard let url = URL(string: video.mediaUrl) else { return nil }
-        return records.first { $0.videoID == video.youtubeId && $0.origin == RequestAuthorization.origin(url) }
+        return records.first { $0.videoID == video.youtubeId && $0.origin == RequestAuthorization.origin(url) && ($0.account == nil || $0.account == authState.playbackAccount) }
     }
     func localURL(for record: OfflineRecord) -> URL? {
         guard record.status == .ready, disk?.exists(record) == true else { return nil }
         return disk?.file(for: record)
     }
+    /// Explicit user adoption: retain the old private bookmark separately. No media bytes move.
+    func linkHistory(_ id: UUID, account: PlaybackAccount, position: Double, video: Video? = nil) -> Bool {
+        guard authState.accountConfirmed, authState.playbackAccount == account,
+              let i = records.firstIndex(where: { $0.id == id }), records[i].account == nil,
+              let url = URL(string: account.server), RequestAuthorization.origin(url) == records[i].origin else { return false }
+        let previous = records[i]
+        records[i].legacyPosition = previous.position
+        records[i].account = account
+        records[i].position = position
+        if let video, video.youtubeId == previous.videoID, video.playbackIdentity?.account == account {
+            records[i].metadata = OfflineVideoMetadata(video: video, origin: previous.origin)
+        }
+        guard persist() else { records[i] = previous; return false }
+        return true
+    }
+
     @discardableResult func enqueue(_ video: Video) -> UUID? {
         if let existing = record(for: video) {
             if existing.status != .ready && !existing.status.isActive { retry(existing.id) }
@@ -79,7 +95,9 @@ final class OfflineLibrary {
               let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedPath else {
             storageError = OfflineFailure.signIn.message; return nil
         }
-        let record = OfflineRecord(video: video, origin: RequestAuthorization.origin(auth.baseURL), mediaPath: path)
+        var record = OfflineRecord(video: video, origin: RequestAuthorization.origin(auth.baseURL), mediaPath: path)
+        record.account = authState.playbackAccount
+        record.position = video.position.isFinite ? max(0, video.position) : 0
         // Validate the actual media URL before storing a candidate, including origin and query restrictions.
         do { _ = try Self.request(url: url, authorization: auth) }
         catch { storageError = OfflineFailure.signIn.message; return nil }
@@ -91,6 +109,11 @@ final class OfflineLibrary {
     func retry(_ id: UUID) {
         guard let i = records.firstIndex(where: { $0.id == id }), records[i].status != .ready,
               let disk, let session else { return }
+        if let owner = records[i].account, owner != authState.playbackAccount {
+            if records[i].status.isActive { interrupt(id, status: .needsSignIn) }
+            else { records[i].status = .needsSignIn; records[i].failure = .signIn; records[i].attempt = nil; persist() }
+            return // Wrong account is not evidence that the current login expired.
+        }
         if records[i].status.isActive, records[i].attempt != nil { return }
         do {
             guard let auth = authState.authorization, let url = URL(string: records[i].origin + records[i].mediaPath) else { throw OfflineFailure.signIn }
@@ -169,9 +192,9 @@ final class OfflineLibrary {
     func channelArtworkURL(_ id: UUID) -> URL? { _ = artworkRevision; return disk?.artworkURL(id, kind: .channel) }
     func canRefreshDetails(_ record: OfflineRecord) -> Bool {
         guard let auth = authState.authorization, auth.isActive else { return false }
-        return RequestAuthorization.origin(auth.baseURL) == record.origin
+        return RequestAuthorization.origin(auth.baseURL) == record.origin && (record.account == nil || record.account == authState.playbackAccount)
     }
-    /// Explicit read-only upgrade path for Build 4 copies with no saved display metadata.
+    /// Read-only metadata upgrade; it never changes private media bytes or playback codecs.
     func refreshDetails(_ id: UUID, using repository: VideoRepositoryProtocol) async {
         guard let record = records.first(where: { $0.id == id }), canRefreshDetails(record),
               let auth = authState.authorization, !refreshingDetails.contains(id) else { return }

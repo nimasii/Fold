@@ -215,8 +215,9 @@ nonisolated struct StoredSession: Codable {
     let serverURL: URL
     let cookies: [StoredCookie]
     let token: String?
+    let userID: Int?
 
-    init(serverURL: URL, cookies: [StoredCookie], token: String? = nil) {
-        self.serverURL = serverURL; self.cookies = cookies; self.token = token
+    init(serverURL: URL, cookies: [StoredCookie], token: String? = nil, userID: Int? = nil) {
+        self.serverURL = serverURL; self.cookies = cookies; self.token = token; self.userID = userID
     }
 }

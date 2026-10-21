@@ -3,10 +3,12 @@ import Foundation
 final class PlaylistRepositoryImpl: PlaylistRepositoryProtocol {
     private let apiClient: APIClient
     private let authState: AuthState
+    private let history: PlaybackCoordinator?
 
-    init(apiClient: APIClient, authState: AuthState) {
+    init(apiClient: APIClient, authState: AuthState, history: PlaybackCoordinator? = nil) {
         self.apiClient = apiClient
         self.authState = authState
+        self.history = history
     }
 
     private var serverURL: String {
@@ -34,10 +36,14 @@ final class PlaylistRepositoryImpl: PlaylistRepositoryProtocol {
     }
 
     func getPlaylistVideos(playlistId: String, page: Int) async throws -> VideoListResult {
+        let context = try await history?.prepareRead()
         let response: VideoListResponseDTO = try await apiClient.request(
             endpoint: .videoList(page: page, sort: "", order: "", watch: nil, channel: nil, vidType: nil, playlist: playlistId)
         )
-        let videos = response.data?.compactMap { VideoMapper.map($0, serverURL: serverURL) } ?? []
+        let videos = try response.data?.compactMap { dto -> Video? in
+            guard let video = VideoMapper.map(dto, serverURL: serverURL) else { return nil }
+            return try history?.accept(video, context: context) ?? video
+        } ?? []
         return VideoListResult(
             videos: videos,
             currentPage: response.paginate?.currentPage ?? page,

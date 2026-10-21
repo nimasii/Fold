@@ -18,8 +18,8 @@ struct Video: Identifiable, Hashable {
     let duration: Int
     let durationStr: String
     var watched: Bool
-    let progress: Double
-    let position: Double
+    var progress: Double
+    var position: Double
     let viewCount: Int
     let likeCount: Int
     let mediaSize: Int64
@@ -29,6 +29,7 @@ struct Video: Identifiable, Hashable {
     let streams: [StreamInfo]
     let sponsorblock: [SponsorBlockSegment]
     var playlists: [String]
+    var playbackIdentity: PlaybackIdentity? = nil
 }
 
 struct StreamInfo: Hashable {

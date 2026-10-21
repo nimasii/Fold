@@ -2,7 +2,12 @@ import Foundation
 
 @Observable
 final class VideoListViewModel {
-    var videos: [Video] = []
+    private var storedVideos: [Video] = []
+    private let playbackCoordinator: PlaybackCoordinator?
+    var videos: [Video] {
+        get { storedVideos.map { playbackCoordinator?.project($0) ?? $0 } }
+        set { storedVideos = newValue }
+    }
     var isLoading = false
     var isLoadingMore = false
     var errorMessage: String?
@@ -27,11 +32,12 @@ final class VideoListViewModel {
     private let authRepository: AuthRepositoryProtocol
     private let downloadRepository: DownloadRepositoryProtocol
 
-    init(videoRepository: VideoRepositoryProtocol, authRepository: AuthRepositoryProtocol, downloadRepository: DownloadRepositoryProtocol, router: AppRouter) {
+    init(videoRepository: VideoRepositoryProtocol, authRepository: AuthRepositoryProtocol, downloadRepository: DownloadRepositoryProtocol, router: AppRouter, playbackCoordinator: PlaybackCoordinator? = nil) {
         self.videoRepository = videoRepository
         self.authRepository = authRepository
         self.downloadRepository = downloadRepository
         self.router = router
+        self.playbackCoordinator = playbackCoordinator
     }
 
     func loadVideos(isRefresh: Bool = false) async {

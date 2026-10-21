@@ -36,15 +36,17 @@ struct MediaPressStyle: ButtonStyle {
 /// Compact hero preserves the full landscape thumbnail and exposes the first shelf.
 struct FeaturedVideo: View {
     let video: Video
+    @Environment(\.playbackCoordinator) private var history
     let onOpen: () -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
+        let video = history?.project(video) ?? video
         VStack(alignment: .leading, spacing: typeSize.isAccessibilitySize ? 16 : -64) {
             Color.black.aspectRatio(16 / 9, contentMode: .fit)
                 .frame(maxHeight: sizeClass == .regular ? 320 : nil)
-                .overlay { AuthenticatedAsyncImage(url: video.thumbUrl) }
+                .overlay { AuthenticatedAsyncImage(url: video.thumbUrl, localFileURL: history?.artwork(for: video)?.thumbnail) }
                 .overlay(alignment: .bottom) {
                     LinearGradient(colors: [.clear, .black.opacity(0.9)], startPoint: .top, endPoint: .bottom)
                         .frame(height: 80)
@@ -59,13 +61,13 @@ struct FeaturedVideo: View {
                 Text("\(video.channelName) · \(video.durationStr)")
                     .font(.subheadline).foregroundStyle(.secondary)
                 Button(action: onOpen) {
-                    Label(String(localized: video.progress > 0 && !video.watched ? "cinema_resume" : "video_detail_play"), systemImage: "play.fill")
+                    Label(String(localized: PlaybackCompletion.resumePosition(position: video.position, duration: Double(video.duration), watched: video.watched) > 0 ? "cinema_resume" : "video_detail_play"), systemImage: "play.fill")
                         .font(.headline).frame(maxWidth: .infinity, minHeight: 34)
                 }
                 .foldAction(prominent: true)
                 .frame(maxWidth: sizeClass == .regular ? 360 : .infinity)
                 .accessibilityIdentifier("library.featured.play")
-                .accessibilityLabel(String(localized: video.progress > 0 && !video.watched ? "cinema_resume" : "video_detail_play") + ", " + video.title)
+                .accessibilityLabel(String(localized: PlaybackCompletion.resumePosition(position: video.position, duration: Double(video.duration), watched: video.watched) > 0 ? "cinema_resume" : "video_detail_play") + ", " + video.title)
             }
             .foregroundStyle(.white)
             .padding(.horizontal, StreamingStyle.gutter).padding(.bottom, 12)

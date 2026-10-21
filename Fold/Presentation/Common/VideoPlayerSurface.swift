@@ -18,6 +18,8 @@ struct VideoPlayerSurface<Overlay: View>: View {
     var vlcSponsorBlockSeekTarget: Double? = nil
     var vlcSeekDelta: Double? = nil
     var onTimeChanged: (Double) -> Void = { _ in }
+    var onPlaybackEnded: () -> Void = {}
+    var onPlaybackResumed: () -> Void = {}
     var onClearVLCSeekDelta: () -> Void = {}
     var onDoubleTap: ((Bool) -> Void)? = nil
     var onPiPStopped: () -> Void = {}
@@ -60,7 +62,7 @@ struct VideoPlayerSurface<Overlay: View>: View {
                         sponsorBlockSeekTarget: vlcSponsorBlockSeekTarget,
                         seekDelta: vlcSeekDelta,
                         onSeekDeltaConsumed: { onClearVLCSeekDelta() },
-                        onDoubleTap: onDoubleTap
+                        onPlaybackEnded: onPlaybackEnded, onPlaybackResumed: onPlaybackResumed, onDoubleTap: onDoubleTap
                     )
                     if isBuffering {
                         Color.black

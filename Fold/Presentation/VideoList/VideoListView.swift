@@ -2,6 +2,7 @@ import SwiftUI
 
 struct VideoListView: View {
     @State var viewModel: VideoListViewModel
+    @Environment(\.playbackCoordinator) private var history
     @Environment(AuthState.self) private var authState
     @State private var showDeleteConfirmation = false
 
@@ -23,6 +24,9 @@ struct VideoListView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 28) {
+                        if history?.syncDeferred == true {
+                            Label(String(localized: "history_sync_pending"), systemImage: "clock").font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+                        }
                         if showsDiscovery, let featured = viewModel.videos.first {
                             FeaturedVideo(video: featured) { viewModel.playFeatured(featured.id) }
                             playlistsEntry
@@ -166,7 +170,7 @@ struct VideoListView: View {
             && viewModel.watchFilter == .unwatched && viewModel.vidTypeFilter == .all
     }
     private var continuing: [Video] {
-        Array(viewModel.videos.filter { $0.progress > 0 && !$0.watched }.prefix(8))
+        Array((history?.continuingVideos(in: viewModel.videos) ?? viewModel.videos.filter { $0.progress > 0 && !$0.watched }).prefix(8))
     }
 
 }

@@ -26,14 +26,17 @@ final class APIClient {
 
     deinit { session.invalidateAndCancel(); loginSession.invalidateAndCancel() }
 
-    func verify(_ authorization: RequestAuthorization) async throws {
+    @discardableResult
+    func verify(_ authorization: RequestAuthorization) async throws -> Int {
         var request = URLRequest(url: authorization.baseURL.appendingPathComponent("api/ping/"))
         try authorization.apply(to: &request)
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse,
               !RequestAuthorization.isAuthenticationFailure(http), (200...299).contains(http.statusCode),
               let ping = try? Self.decoder.decode(PingDTO.self, from: data),
-              ping.response == "pong", ping.user != nil else { throw AppError.unauthorized }
+              ping.response == "pong", let user = ping.user, user > 0 else { throw AppError.unauthorized }
+        try Task.checkCancellation()
+        return user
     }
 
     func request<T: Decodable>(
@@ -52,16 +55,19 @@ final class APIClient {
     func requestVoid(
         endpoint: APIEndpoint,
         body: (any Encodable)? = nil,
-        baseURL: URL? = nil
+        baseURL: URL? = nil,
+        expectedAuthorizationID: UUID? = nil
     ) async throws {
-        _ = try await rawRequest(endpoint: endpoint, body: body, baseURL: baseURL)
+        _ = try await rawRequest(endpoint: endpoint, body: body, baseURL: baseURL, expectedAuthorizationID: expectedAuthorizationID)
     }
 
     private func rawRequest(
         endpoint: APIEndpoint,
         body: (any Encodable)? = nil,
-        baseURL: URL? = nil
+        baseURL: URL? = nil,
+        expectedAuthorizationID: UUID? = nil
     ) async throws -> Data {
+        if let expectedAuthorizationID, authState.authorization?.id != expectedAuthorizationID { throw CancellationError() }
         let base = baseURL ?? authState.baseURL
         guard let base else {
             throw AppError.invalidURL

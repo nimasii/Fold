@@ -8,6 +8,7 @@ final class DependencyContainer {
     let keychainService: KeychainService
     let authState: AuthState
     let offlineLibrary: OfflineLibrary
+    let playbackCoordinator: PlaybackCoordinator
 
     // Network
     let apiClient: APIClient
@@ -56,6 +57,8 @@ final class DependencyContainer {
                 try? store.save(copies)
             }
             offlineLibrary = OfflineLibrary(authState: authState, root: root)
+            authState.setVerifiedAccount(1, authorizationID: authState.authorization!.id)
+            playbackCoordinator = PlaybackCoordinator(auth: authState, api: apiClient, library: offlineLibrary, root: root.appendingPathComponent("History"))
             router.onLoginSuccess()
             if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-downloads") { router.selectedTab = .downloads }
             if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-login") { router.appState = .login }
@@ -63,9 +66,9 @@ final class DependencyContainer {
         }
         #endif
         #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--session-persistence-fixture") {
+        if ProcessInfo.processInfo.arguments.contains("--session-persistence-fixture") || ProcessInfo.processInfo.arguments.contains("--history-playback-fixture") {
             keychainService = KeychainService(persistentFixture: true)
-            if ProcessInfo.processInfo.arguments.contains("--session-persistence-reset") { keychainService.clearAll() }
+            if ProcessInfo.processInfo.arguments.contains("--session-persistence-reset") || ProcessInfo.processInfo.arguments.contains("--history-fixture-reset") { keychainService.clearAll() }
         } else { keychainService = KeychainService() }
         #else
         keychainService = KeychainService()
@@ -76,18 +79,29 @@ final class DependencyContainer {
         #else
         authState = AuthState(keychainService: keychainService)
         #endif
+        #if DEBUG && targetEnvironment(simulator)
+        var historyFixtureRoot: URL?
+        if ProcessInfo.processInfo.arguments.contains("--history-playback-fixture") {
+            historyFixtureRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("UnifiedPlaybackHTTPFixture-v1")
+            if ProcessInfo.processInfo.arguments.contains("--history-fixture-reset"), let historyFixtureRoot { try? FileManager.default.removeItem(at: historyFixtureRoot) }
+            if !authState.isAuthenticated { try? authState.setExistingToken("HISTORY_FIXTURE_TOKEN", serverURL: URL(string: "http://127.0.0.1:18086")!, userID: 7) }
+        }
+        #else
+        let historyFixtureRoot: URL? = nil
+        #endif
         apiClient = APIClient(authState: authState)
 
+        offlineLibrary = OfflineLibrary(authState: authState, root: historyFixtureRoot?.appendingPathComponent("Downloads"))
+        playbackCoordinator = PlaybackCoordinator(auth: authState, api: apiClient, library: offlineLibrary, root: historyFixtureRoot?.appendingPathComponent("History"))
         authRepository = AuthRepositoryImpl(apiClient: apiClient, authState: authState)
-        videoRepository = VideoRepositoryImpl(apiClient: apiClient, authState: authState)
-        searchRepository = SearchRepositoryImpl(apiClient: apiClient, authState: authState)
+        videoRepository = VideoRepositoryImpl(apiClient: apiClient, authState: authState, history: playbackCoordinator)
+        searchRepository = SearchRepositoryImpl(apiClient: apiClient, authState: authState, history: playbackCoordinator)
         channelRepository = ChannelRepositoryImpl(apiClient: apiClient, authState: authState)
         downloadRepository = DownloadRepositoryImpl(apiClient: apiClient, authState: authState)
-        playlistRepository = PlaylistRepositoryImpl(apiClient: apiClient, authState: authState)
+        playlistRepository = PlaylistRepositoryImpl(apiClient: apiClient, authState: authState, history: playbackCoordinator)
 
         sponsorBlockSettings = SponsorBlockSettings()
         router = AppRouter(authState: authState)
-        offlineLibrary = OfflineLibrary(authState: authState)
     }
 
     // MARK: - ViewModel Factories
@@ -99,11 +113,11 @@ final class DependencyContainer {
     }
 
     func makeVideoListViewModel() -> VideoListViewModel {
-        VideoListViewModel(videoRepository: videoRepository, authRepository: authRepository, downloadRepository: downloadRepository, router: router)
+        VideoListViewModel(videoRepository: videoRepository, authRepository: authRepository, downloadRepository: downloadRepository, router: router, playbackCoordinator: playbackCoordinator)
     }
 
     func makeVideoDetailViewModel(videoId: String) -> VideoDetailViewModel {
-        VideoDetailViewModel(videoId: videoId, videoRepository: videoRepository, authState: authState, router: router, sponsorBlockSettings: sponsorBlockSettings, playlistRepository: playlistRepository)
+        VideoDetailViewModel(videoId: videoId, videoRepository: videoRepository, authState: authState, router: router, sponsorBlockSettings: sponsorBlockSettings, playlistRepository: playlistRepository, playbackCoordinator: playbackCoordinator)
     }
 
     func makeSearchViewModel() -> SearchViewModel {
@@ -111,7 +125,7 @@ final class DependencyContainer {
     }
 
     func makeChannelDetailViewModel(channelId: String) -> ChannelDetailViewModel {
-        ChannelDetailViewModel(channelId: channelId, channelRepository: channelRepository, videoRepository: videoRepository, router: router)
+        ChannelDetailViewModel(channelId: channelId, channelRepository: channelRepository, videoRepository: videoRepository, router: router, playbackCoordinator: playbackCoordinator)
     }
 
     func makeDownloadQueueViewModel() -> DownloadQueueViewModel {
@@ -123,7 +137,7 @@ final class DependencyContainer {
     }
 
     func makePlaylistDetailViewModel(playlistId: String) -> PlaylistDetailViewModel {
-        PlaylistDetailViewModel(playlistId: playlistId, playlistRepository: playlistRepository, videoRepository: videoRepository, router: router)
+        PlaylistDetailViewModel(playlistId: playlistId, playlistRepository: playlistRepository, videoRepository: videoRepository, router: router, playbackCoordinator: playbackCoordinator)
     }
 
     func makeSettingsViewModel() -> SettingsViewModel {

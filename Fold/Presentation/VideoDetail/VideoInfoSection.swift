@@ -15,15 +15,20 @@ struct VideoInfoSection: View {
                 HStack(spacing: 12) { metadata }
                 VStack(alignment: .leading, spacing: 6) { metadata }
             }.font(.subheadline).foregroundStyle(.secondary)
+            if video.position.isFinite, video.position >= 0, video.position > 0 || video.playbackIdentity != nil {
+                Text(String(localized: "cinema_playback_position") + ": " + Duration.seconds(video.position).formatted(.time(pattern: .minuteSecond)))
+                    .font(.caption).monospacedDigit().foregroundStyle(Color(.label))
+                    .accessibilityIdentifier("video.resume-position")
+            }
             FoldGlassGroup {
                 HStack(spacing: 12) {
                     if let onPlay {
                         Button(action: onPlay) {
-                            Label(String(localized: video.position > 0 ? "cinema_resume" : "video_detail_play"), systemImage: "play.fill")
+                            Label(String(localized: PlaybackCompletion.resumePosition(position: video.position, duration: Double(video.duration), watched: video.watched) > 0 ? "cinema_resume" : "video_detail_play"), systemImage: "play.fill")
                                 .font(.headline).frame(maxWidth: .infinity, minHeight: 28)
                         }.foldAction(prominent: true)
                         .accessibilityIdentifier("video.play-action")
-                        .accessibilityLabel(String(localized: video.position > 0 ? "cinema_resume" : "video_detail_play") + ", " + video.title)
+                        .accessibilityLabel(String(localized: PlaybackCompletion.resumePosition(position: video.position, duration: Double(video.duration), watched: video.watched) > 0 ? "cinema_resume" : "video_detail_play") + ", " + video.title)
                     }
                     if showsDownload { OfflineDownloadButton(video: video, compact: true) }
                 }
@@ -47,7 +52,7 @@ struct VideoInfoSection: View {
             AuthenticatedAsyncImage(url: video.channelThumbUrl, placeholderColor: StreamingStyle.surface,
                 localFileURL: localArtwork?.channel, localRevision: localArtwork?.revision ?? 0)
                 .frame(width: 36, height: 36).clipShape(.circle).accessibilityHidden(true)
-            Text(video.channelName).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+            Text(video.channelName).font(.subheadline.weight(.semibold)).foregroundStyle(Color(.label))
                 .frame(maxWidth: .infinity, alignment: .leading)
             if onChannelTap != nil {
                 Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary).accessibilityHidden(true)

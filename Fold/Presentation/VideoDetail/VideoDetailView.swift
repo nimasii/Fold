@@ -27,7 +27,7 @@ struct VideoDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if !viewModel.isLocalPlayback {
+                if !viewModel.isPrivatePlayback {
                 Menu {
                     if let video = viewModel.video {
                         Button {
@@ -39,7 +39,7 @@ struct VideoDetailView: View {
                             ? String(localized: "video_mark_unwatched")
                             : String(localized: "video_mark_watched"))
                     }
-                    if !viewModel.isLocalPlayback {
+                    if !viewModel.isPrivatePlayback {
                         Button {
                             viewModel.showAddToPlaylistSheet = true
                         } label: {
@@ -47,7 +47,7 @@ struct VideoDetailView: View {
                         }
                         .accessibilityLabel(String(localized: "video_add_to_playlist"))
                     }
-                    if !viewModel.isLocalPlayback && authState.isPrivileged {
+                    if !viewModel.isPrivatePlayback && authState.isPrivileged {
                         Button {
                             viewModel.showDeleteDialog = true
                         } label: {
@@ -99,6 +99,7 @@ struct VideoDetailView: View {
         .task {
             await viewModel.loadComments()
         }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification)) { _ in viewModel.persistCurrentProgress() }
         .onAppear { viewModel.isViewVisible = true }
         .onDisappear {
             viewModel.isViewVisible = false
@@ -137,11 +138,13 @@ struct VideoDetailView: View {
             seekFeedback: viewModel.seekFeedback, vlcSponsorBlockSeekTarget: viewModel.vlcSponsorBlockSeekTarget,
             vlcSeekDelta: viewModel.vlcSeekDelta,
             onTimeChanged: { viewModel.onVLCTimeChanged(seconds: $0) },
+            onPlaybackEnded: { viewModel.playbackDidEnd() },
+            onPlaybackResumed: { viewModel.playbackDidResume() },
             onClearVLCSeekDelta: { viewModel.clearVLCSeekDelta() },
             onDoubleTap: viewModel.doubleTapToSeek ? { viewModel.seekByInterval(forward: $0) } : nil,
             onPiPStopped: { viewModel.handlePiPStopped() },
             onPlay: { viewModel.startPlayback() },
-            onRetry: { viewModel.playbackError = nil; viewModel.startPlayback() },
+            onRetry: { viewModel.retryPlayback() },
             overlay: sponsorBlockBanner
         )
     }
@@ -187,15 +190,36 @@ struct VideoDetailView: View {
     private func videoDetails(_ video: Video) -> some View {
         VStack(alignment: .leading, spacing: 24) {
             VideoInfoSection(video: video,
-                onChannelTap: viewModel.isLocalPlayback ? nil : { viewModel.navigateToChannel($0) },
+                onChannelTap: viewModel.isPrivatePlayback ? nil : { viewModel.navigateToChannel($0) },
                 localArtwork: viewModel.localPlayback?.artwork,
                 showsStatistics: !viewModel.isLocalPlayback || viewModel.localPlayback?.record.metadata != nil,
                 onPlay: viewModel.isPlaying ? nil : { viewModel.startPlayback() },
                 showsDownload: !viewModel.isLocalPlayback)
 
+            #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--history-playback-fixture"),
+               !ProcessInfo.processInfo.arguments.contains("--history-hide-probes") {
+                Text("Fixture native status: \(viewModel.nativePlaybackStatus.rawValue)")
+                    .font(.caption).accessibilityIdentifier("fixture.player.status")
+                Text(String(format: "%.3f", viewModel.nativePlaybackPosition)).font(.caption).accessibilityIdentifier("fixture.player.position")
+                Text(String(format: "%.3f", video.position)).font(.caption).accessibilityIdentifier("fixture.saved.position")
+            }
+            #endif
+            if viewModel.historySyncDeferred {
+                Label(String(localized: "history_sync_pending"), systemImage: "clock").font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+            }
+            if let error = viewModel.historyErrorMessage {
+                Label(error, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red).padding(.horizontal)
+            }
+            if viewModel.earlierDeviceBookmark != nil {
+                Button(String(localized: "history_resume_earlier")) { viewModel.resumeEarlierDeviceBookmark() }
+                    .padding(.horizontal)
+            }
             if viewModel.isLocalPlayback {
                 Label(String(localized: "offline_playing_local"), systemImage: "internaldrive")
                     .font(.footnote).foregroundStyle(.secondary).padding(.horizontal)
+            }
+            if viewModel.isPrivatePlayback {
                 if let description = video.description, !description.isEmpty {
                     Text(description).font(.body).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal)
                 }

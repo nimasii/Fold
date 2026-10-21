@@ -2,9 +2,12 @@ import SwiftUI
 
 struct VideoCardView: View {
     let video: Video
+    @Environment(\.playbackCoordinator) private var history
+    private var displayed: Video { history?.project(video) ?? video }
     var onChannelTap: ((String) -> Void)? = nil
     var localArtwork: LocalVideoArtwork? = nil
     var supplementaryText: String? = nil
+    private var artwork: LocalVideoArtwork? { localArtwork ?? history?.artwork(for: video) }
     var onOpen: (() -> Void)? = nil
     var isSelected: Bool = false
     var onSelect: (() -> Void)? = nil
@@ -13,9 +16,9 @@ struct VideoCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if onOpen != nil { selectableButton } else { posterAndTitle }
-            if let onChannelTap, !video.channelId.isEmpty {
-                Button { onChannelTap(video.channelId) } label: { channelLabel }
-                    .buttonStyle(.plain).accessibilityLabel(video.channelName)
+            if let onChannelTap, !displayed.channelId.isEmpty {
+                Button { onChannelTap(displayed.channelId) } label: { channelLabel }
+                    .buttonStyle(.plain).accessibilityLabel(displayed.channelName)
                     .accessibilityHint(String(localized: "stream_open_channel"))
             } else { channelLabel }
             if let supplementaryText {
@@ -39,9 +42,9 @@ struct VideoCardView: View {
     private var actionButton: some View {
         Button { onOpen?() } label: { posterAndTitle }
             .buttonStyle(MediaPressStyle())
-            .accessibilityLabel("\(video.title), \(video.channelName), \(video.durationStr)")
+            .accessibilityLabel("\(displayed.title), \(displayed.channelName), \(displayed.durationStr)")
             .accessibilityHint(String(localized: "stream_open_video"))
-            .accessibilityIdentifier("video.card." + video.id)
+            .accessibilityIdentifier("video.card." + displayed.id)
             .accessibilityAddTraits(isSelected ? .isSelected : [])
             .accessibilityActions {
                 if let onSelect { Button(String(localized: "stream_select"), action: onSelect) }
@@ -52,32 +55,32 @@ struct VideoCardView: View {
             Color(.secondarySystemBackground)
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .overlay {
-                    AuthenticatedAsyncImage(url: video.thumbUrl, localFileURL: localArtwork?.thumbnail,
-                                            localRevision: localArtwork?.revision ?? 0, serverVideoID: video.youtubeId)
+                    AuthenticatedAsyncImage(url: displayed.thumbUrl, localFileURL: artwork?.thumbnail,
+                                            localRevision: artwork?.revision ?? 0, serverVideoID: displayed.youtubeId)
                 }
                 .overlay(alignment: .bottomTrailing) {
-                    Text(video.durationStr).font(.caption2.weight(.semibold)).monospacedDigit()
+                    Text(displayed.durationStr).font(.caption2.weight(.semibold)).monospacedDigit()
                         .foregroundStyle(.white).padding(.horizontal, 7).padding(.vertical, 4)
                         .background(.black.opacity(0.8), in: .rect(cornerRadius: 6)).padding(8)
                 }
                 .overlay(alignment: .topLeading) {
-                    if video.watched {
+                    if displayed.watched {
                         Image(systemName: "checkmark.circle.fill").font(.caption)
                             .foregroundStyle(.white).padding(6).background(.black.opacity(0.8), in: .circle).padding(8)
                     }
                 }
                 .overlay(alignment: .bottomLeading) {
-                    if video.progress > 0 && !video.watched {
+                    if displayed.progress > 0 && PlaybackCompletion.resumePosition(position: displayed.position, duration: Double(displayed.duration), watched: displayed.watched) > 0 {
                         GeometryReader { geometry in
                             Rectangle().fill(.tint)
-                                .frame(width: geometry.size.width * min(100, max(0, video.progress)) / 100, height: 3)
+                                .frame(width: geometry.size.width * min(100, max(0, displayed.progress)) / 100, height: 3)
                                 .frame(maxHeight: .infinity, alignment: .bottom)
                         }
                     }
                 }
                 .clipShape(.rect(cornerRadius: StreamingStyle.corner))
                 .accessibilityHidden(true)
-            Text(video.title).font(.callout.weight(.semibold)).foregroundStyle(.primary)
+            Text(displayed.title).font(.callout.weight(.semibold)).foregroundStyle(.primary)
                 .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -85,10 +88,10 @@ struct VideoCardView: View {
     }
     private var channelLabel: some View {
         HStack(alignment: .center, spacing: 7) {
-            AuthenticatedAsyncImage(url: video.channelThumbUrl, placeholderColor: Color(.tertiarySystemBackground),
-                localFileURL: localArtwork?.channel, localRevision: localArtwork?.revision ?? 0)
+            AuthenticatedAsyncImage(url: displayed.channelThumbUrl, placeholderColor: Color(.tertiarySystemBackground),
+                localFileURL: artwork?.channel, localRevision: artwork?.revision ?? 0)
                 .frame(width: 22, height: 22).clipShape(.circle).accessibilityHidden(true)
-            Text(video.channelName).font(.caption).foregroundStyle(.secondary)
+            Text(displayed.channelName).font(.caption).foregroundStyle(.secondary)
                 .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }

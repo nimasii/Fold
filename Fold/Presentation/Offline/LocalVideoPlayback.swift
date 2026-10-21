@@ -17,8 +17,8 @@ struct LocalVideoPlayback {
     }
 }
 
-/// Capability-limited repository for the normal detail/controller path. Local playback
-/// cannot issue server requests or synchronize private viewing progress to the server.
+/// Capability-limited repository for unlinked device-only copies. Their unattributed
+/// bookmarks never issue server requests or enter an account's synchronization outbox.
 final class LocalVideoRepository: VideoRepositoryProtocol {
     private let source: LocalVideoPlayback
     init(source: LocalVideoPlayback) { self.source = source }

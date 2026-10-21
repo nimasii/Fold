@@ -31,6 +31,9 @@ nonisolated struct OfflineRecord: Identifiable, Codable, Hashable {
     var failure: OfflineFailure?
     var attempt: UUID?
     var position: Double = 0
+    /// Nil in older manifests: their private bookmark has no provable account owner.
+    var account: PlaybackAccount?
+    var legacyPosition: Double?
     var metadata: OfflineVideoMetadata?
     /// Actual private-copy streams. Optional for safe decoding of old manifests;
     /// refreshing server metadata must never overwrite converted playback codecs.

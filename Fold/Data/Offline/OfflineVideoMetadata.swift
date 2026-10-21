@@ -11,6 +11,17 @@ nonisolated struct OfflineVideoMetadata: Codable, Hashable {
         let height: Int?
         var value: StreamInfo { StreamInfo(type: type, codec: codec, bitrate: bitrate, width: width, height: height) }
     }
+    struct Sponsor: Codable, Hashable {
+        let category: String
+        let start: Double
+        let end: Double
+        var value: SponsorBlockSegment? {
+            guard let category = SponsorCategory(rawValue: category), start.isFinite, end.isFinite, start >= 0, end > start else { return nil }
+            return SponsorBlockSegment(category: category, startTime: start, endTime: end)
+        }
+    }
+    let sponsorSegments: [Sponsor]?
+    let playlistIDs: [String]?
     let description: String?
     let published: String
     let publishedShort: String
@@ -26,6 +37,8 @@ nonisolated struct OfflineVideoMetadata: Codable, Hashable {
     let channelArtworkPath: String?
 
     init(video: Video, origin: String) {
+        sponsorSegments = video.sponsorblock.map { Sponsor(category: $0.category.rawValue, start: $0.startTime, end: $0.endTime) }
+        playlistIDs = video.playlists
         description = video.description; published = video.published; publishedShort = video.publishedShort
         downloaded = video.downloaded; downloadedShort = video.downloadedShort; durationString = video.durationStr
         channelID = video.channelId; views = video.viewCount; likes = video.likeCount; videoType = video.vidType
@@ -69,9 +82,11 @@ nonisolated struct OfflineVideoMetadata: Codable, Hashable {
 extension OfflineRecord {
     /// Uses the local UUID as grid identity: equal YouTube IDs on different servers stay distinct.
     /// Empty remote artwork/media URLs prevent shared presentation from contacting a server.
-    var displayVideo: Video {
+    var displayVideo: Video { videoSnapshot(id: id.uuidString) }
+    var libraryVideo: Video { videoSnapshot(id: videoID) }
+    private func videoSnapshot(id displayID: String) -> Video {
         let durationString = metadata?.durationString ?? Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))
-        return Video(youtubeId: id.uuidString, title: title, description: metadata?.description,
+        return Video(youtubeId: displayID, title: title, description: metadata?.description,
                      published: metadata?.published ?? "", publishedShort: metadata?.publishedShort ?? "",
                      downloaded: metadata?.downloaded ?? "", downloadedShort: metadata?.downloadedShort ?? "",
                      channelName: channel, channelId: metadata?.channelID ?? "", channelThumbUrl: nil,
@@ -79,6 +94,6 @@ extension OfflineRecord {
                      watched: false, progress: duration > 0 ? min(100, position / Double(duration) * 100) : 0,
                      position: position, viewCount: metadata?.views ?? 0, likeCount: metadata?.likes ?? 0,
                      mediaSize: bytes, vidType: metadata?.videoType ?? "videos", category: [], tags: [],
-                     streams: (playbackStreams ?? metadata?.streams)?.map(\.value) ?? codecs.map { StreamInfo(type: "video", codec: $0, bitrate: 0, width: nil, height: nil) }, sponsorblock: [], playlists: [])
+                     streams: (playbackStreams ?? metadata?.streams)?.map(\.value) ?? codecs.map { StreamInfo(type: "video", codec: $0, bitrate: 0, width: nil, height: nil) }, sponsorblock: metadata?.sponsorSegments?.compactMap(\.value) ?? [], playlists: metadata?.playlistIDs ?? [])
     }
 }

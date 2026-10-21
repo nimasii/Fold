@@ -4,6 +4,10 @@ import SwiftUI
 final class VLCPlayerState {
     var isPlaying = false
     var currentTime: Double = 0
+    var engineTime: Double = 0
+    var confirmedSeekTarget: Double = -1
+    var confirmedSeekTime: Double = -1
+    var confirmedSeekElapsed: Double = 0
     var duration: Double = 0
     var controlsVisible = true
 }
@@ -25,6 +29,18 @@ struct VLCPlayerControls: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onTapToggle() }
 
+            #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--history-playback-fixture") {
+                VStack(alignment: .leading) {
+                    Text(String(format: "%.3f", state.engineTime)).accessibilityIdentifier("fixture.vlc.position")
+                    Text(String(format: "%.3f", state.confirmedSeekTarget)).accessibilityIdentifier("fixture.vlc.confirmed-target")
+                    Text(String(format: "%.3f", state.confirmedSeekTime)).accessibilityIdentifier("fixture.vlc.confirmed-position")
+                    Text(String(format: "%.3f", state.confirmedSeekElapsed)).accessibilityIdentifier("fixture.vlc.confirmed-elapsed")
+                }.font(.caption2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
+            }
+            #endif
             if state.controlsVisible {
                 VStack {
                     Spacer()

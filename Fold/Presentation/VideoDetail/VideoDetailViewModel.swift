@@ -7,7 +7,30 @@ private nonisolated let logger = Logger(subsystem: "ru.mzhukov.TAClient", catego
 @Observable
 final class VideoDetailViewModel {
     let videoId: String
-    var video: Video?
+    private var storedVideo: Video?
+    var video: Video? {
+        get { storedVideo.map { playbackCoordinator?.project($0) ?? $0 } }
+        set { storedVideo = newValue }
+    }
+    private let playbackCoordinator: PlaybackCoordinator?
+    private var playbackSession: PlaybackSession?
+    private var progressOrdinal: UInt64 = 0
+    private var hasPlayed = false
+    private var usesDurableProgress: Bool { playbackSession != nil || isLocalPlayback }
+    private var reachedEnd = false
+    private var bypassLocalSource = false
+    @ObservationIgnored private var metadataRefreshTask: Task<Void, Never>?
+    var historySyncDeferred: Bool { playbackCoordinator?.syncDeferred == true }
+    var historyErrorMessage: String? { playbackCoordinator?.errorMessage }
+    var earlierDeviceBookmark: Double? { localPlayback?.record.legacyPosition }
+    func resumeEarlierDeviceBookmark() {
+        guard let seconds = earlierDeviceBookmark, let identity = video?.playbackIdentity else { return }
+        stopPlayback()
+        playbackSession = playbackCoordinator?.session(for: identity); progressOrdinal = 0
+        persistSharedProgress(seconds)
+        startPlayback()
+    }
+    private var playbackAuthorizationID: UUID?
     var comments: [Comment] = []
     var similarVideos: [Video] = []
     var isLoading = true
@@ -29,6 +52,8 @@ final class VideoDetailViewModel {
     private(set) var vlcMediaURL: URL?
     var isPlaying: Bool { player != nil || vlcMediaURL != nil }
     private(set) var isBuffering = false
+    private(set) var nativePlaybackPosition: Double = 0
+    private(set) var nativePlaybackStatus: AVPlayer.TimeControlStatus = .paused
 
     // SponsorBlock
     private(set) var skippedSegment: SponsorBlockSegment?
@@ -36,7 +61,8 @@ final class VideoDetailViewModel {
     private var skipBannerTask: Task<Void, Never>?
     private var skippedSegmentIds: Set<String> = []  // track skipped segments by "start-end" key
 
-    let localPlayback: LocalVideoPlayback?
+    private(set) var localPlayback: LocalVideoPlayback?
+    var isPrivatePlayback: Bool { isLocalPlayback && video?.playbackIdentity == nil }
     var isLocalPlayback: Bool { localPlayback != nil }
 
     private let videoRepository: VideoRepositoryProtocol
@@ -275,7 +301,9 @@ final class VideoDetailViewModel {
     private var sessionCoordinator: PlayerSessionCoordinator?
     private var nowPlaying: NowPlayingController?
 
-    init(videoId: String, videoRepository: VideoRepositoryProtocol, authState: AuthState, router: AppRouter, sponsorBlockSettings: SponsorBlockSettings = SponsorBlockSettings(), playlistRepository: PlaylistRepositoryProtocol? = nil, localPlayback: LocalVideoPlayback? = nil) {
+    init(videoId: String, videoRepository: VideoRepositoryProtocol, authState: AuthState, router: AppRouter, sponsorBlockSettings: SponsorBlockSettings = SponsorBlockSettings(), playlistRepository: PlaylistRepositoryProtocol? = nil, localPlayback: LocalVideoPlayback? = nil, playbackCoordinator: PlaybackCoordinator? = nil) {
+        self.playbackCoordinator = playbackCoordinator
+        self.playbackAuthorizationID = authState.authorization?.id
         self.localPlayback = localPlayback
         self.videoId = videoId
         self.videoRepository = videoRepository
@@ -332,6 +360,8 @@ final class VideoDetailViewModel {
             let time = CMTime(seconds: target, preferredTimescale: 600)
             recordSeek("[Seek] reason=seekByInterval forward=\(forward) from=\(String(format: "%.2f", current))s to=\(String(format: "%.2f", target))s")
             player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+            reachedEnd = false; hasPlayed = true
+            persistSharedProgress(target)
             showSeekFeedback(forward: forward)
         } else if vlcMediaURL != nil {
             vlcSeekDelta = forward ? interval : -interval
@@ -358,6 +388,7 @@ final class VideoDetailViewModel {
 
     var startPosition: Double {
         guard let video else { return 0 }
+        if playbackCoordinator != nil { return PlaybackCompletion.resumePosition(position: video.position, duration: Double(video.duration), watched: video.watched) }
         if isLocalPlayback && video.position >= Double(video.duration) - 0.25 { return 0 }
         return video.position
     }
@@ -365,6 +396,11 @@ final class VideoDetailViewModel {
     func startPlayback() {
         guard !isPlaying && !isBuffering, let video else { return }
 
+        if let identity = video.playbackIdentity, playbackCoordinator != nil {
+            guard authState.playbackAccount == nil || authState.playbackAccount == identity.account else { return }
+            playbackSession = playbackCoordinator?.session(for: identity)
+            progressOrdinal = 0; hasPlayed = false; reachedEnd = false
+        }
         isBuffering = true
         let requiredPlayer = playbackEngine(for: video)
         playerType = requiredPlayer
@@ -1143,6 +1179,23 @@ final class VideoDetailViewModel {
         // don't want to pretend the save succeeded when it didn't, so
         // `lastSavedPosition` (which the ViewModel reads as "confirmed
         // persisted") only advances on success.
+        if usesDurableProgress {
+            saveProgressObserver = avPlayer.addPeriodicTimeObserver(forInterval: CMTime(seconds: 1, preferredTimescale: 600), queue: .main) { [weak self, weak avPlayer] _ in
+                Task { @MainActor [weak self, weak avPlayer] in
+                    guard let self, let avPlayer, self.player === avPlayer else { return }
+                    if avPlayer.rate > 0 { self.hasPlayed = true; self.reachedEnd = false }
+                    self.persistCurrentProgress()
+                }
+            }
+            let jump = NotificationCenter.default.addObserver(forName: .AVPlayerItemTimeJumped, object: avPlayer.currentItem, queue: .main) { [weak self, weak avPlayer] _ in
+                Task { @MainActor [weak self, weak avPlayer] in
+                    guard let self, let avPlayer, self.player === avPlayer else { return }
+                    self.persistCurrentProgress()
+                }
+            }
+            observerBag.addNotification(jump)
+            return
+        }
         let saveInterval = CMTime(seconds: isLocalPlayback ? 10 : 30, preferredTimescale: 600)
         saveProgressObserver = avPlayer.addPeriodicTimeObserver(forInterval: saveInterval, queue: progressQueue) { [weak self, weak avPlayer] time in
             guard let self, let avPlayer else { return }
@@ -1340,6 +1393,8 @@ final class VideoDetailViewModel {
                 let time = CMTime(seconds: positionTime, preferredTimescale: 600)
                 recordSeek("[Seek] reason=nowPlayingRemote to=\(String(format: "%.2f", positionTime))s")
                 player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+                self.reachedEnd = false; self.hasPlayed = true
+                self.persistSharedProgress(positionTime)
                 self.nowPlaying?.refresh()
             }
         )
@@ -1453,11 +1508,18 @@ final class VideoDetailViewModel {
         lastAttemptedSavePosition = finalPosition
         progressStateLock.unlock()
         nowPlaying?.refresh()
-        Task { await self.saveProgress(position: finalPosition) }
+        reachedEnd = true; hasPlayed = true
+        if usesDurableProgress {
+            persistSharedProgress(finalPosition, ended: true)
+        } else { Task { await self.saveProgress(position: finalPosition) } }
     }
 
     @MainActor
     func handlePlaybackFailure(message: String) {
+        if isLocalPlayback, !isPrivatePlayback, !bypassLocalSource, authState.isAuthenticated {
+            retryPlayback()
+            return
+        }
         playbackError = message
         stopPlayback()
     }
@@ -1470,19 +1532,29 @@ final class VideoDetailViewModel {
         let statusToken = avPlayer.observe(\.timeControlStatus, options: [.new, .old]) { [weak self] player, _ in
             let status = player.timeControlStatus
             let reason = player.reasonForWaitingToPlay?.rawValue ?? "none"
-            let pos = Int(player.currentTime().seconds)
+            let currentSeconds = player.currentTime().seconds
+            let pos = currentSeconds.isFinite ? Int(currentSeconds) : 0
             let bufferEmpty = player.currentItem?.isPlaybackBufferEmpty ?? false
             let keepUp = player.currentItem?.isPlaybackLikelyToKeepUp ?? false
             logger.notice("timeControlStatus=\(status.rawValue) reason=\(reason, privacy: .public) pos=\(pos)s bufferEmpty=\(bufferEmpty) keepUp=\(keepUp)")
+            Task { @MainActor [weak self, weak player] in
+                guard let self, let player, self.player === player else { return }
+                self.nativePlaybackStatus = player.timeControlStatus
+            }
             if status == .playing {
                 guard let self else { return }
                 Task { @MainActor in
                     self.isBuffering = false
+                    self.hasPlayed = true; self.reachedEnd = false
                     // Refresh after stall recovery so the lock-screen scrubber
                     // reflects that we're playing again rather than buffering.
                     self.nowPlaying?.refresh()
                 }
             } else {
+                Task { @MainActor [weak self, weak player] in
+                    guard let self, let player, self.player === player else { return }
+                    self.persistCurrentProgress()
+                }
                 self?.logCacheHealth(videoId: cachedVideoId, playbackPosition: Double(pos), duration: duration)
             }
         }
@@ -1819,6 +1891,13 @@ final class VideoDetailViewModel {
     }
 
     func onVLCTimeChanged(seconds: Double) {
+        if usesDurableProgress, seconds.isFinite, seconds >= 0 {
+            if seconds > 0 { hasPlayed = true; isBuffering = false }
+            lastVLCPosition = seconds
+            if hasPlayed && !reachedEnd { persistSharedProgress(seconds) }
+            checkSponsorBlockSkipVLC(currentTime: seconds)
+            return
+        }
         if seconds > 0 {
             if isBuffering { isBuffering = false }
             lastVLCPosition = seconds
@@ -1834,6 +1913,8 @@ final class VideoDetailViewModel {
     // MARK: - Stop
 
     func stopPlayback() {
+        persistCurrentProgress()
+        metadataRefreshTask?.cancel(); metadataRefreshTask = nil
         isBuffering = false
         isPiPActive = false
         skipBannerTask?.cancel()
@@ -1928,10 +2009,58 @@ final class VideoDetailViewModel {
     }
 
     private func persistPositionOnStop(_ seconds: Double) {
+        if usesDurableProgress { return } // Durable progress was synchronously flushed before teardown.
         if let localPlayback {
             localPlayback.library.savePosition(localPlayback.record.id, seconds: seconds)
         } else {
             Task { await saveProgress(position: seconds) }
+        }
+    }
+
+    @discardableResult
+    private func persistSharedProgress(_ seconds: Double, ended: Bool = false) -> Bool {
+        guard let video, seconds.isFinite, seconds >= 0 else { return false }
+        let actual = player?.currentItem?.duration.seconds ?? 0
+        let duration = actual.isFinite && actual > 0 ? actual : Double(video.duration)
+        if playbackSession == nil, let source = localPlayback {
+            source.library.savePosition(source.record.id, seconds: ended && duration > 0 ? duration : seconds)
+            return source.library.storageError == nil
+        }
+        guard let playbackSession, let playbackCoordinator else { return false }
+        guard authState.authorization?.id == playbackAuthorizationID || authState.authorization == nil else { return false }
+        progressOrdinal += 1
+        return playbackCoordinator.record(seconds, duration: duration, session: playbackSession, ordinal: progressOrdinal, ended: ended)
+    }
+
+    func persistCurrentProgress() {
+        if let time = player?.currentTime().seconds, time.isFinite { nativePlaybackPosition = time }
+        guard usesDurableProgress, hasPlayed, !reachedEnd else { return }
+        if let player {
+            let seconds = player.currentTime().seconds
+            if seconds.isFinite && seconds >= 0 { persistSharedProgress(seconds) }
+        } else if vlcMediaURL != nil { persistSharedProgress(lastVLCPosition) }
+    }
+
+    func playbackDidResume() {
+        hasPlayed = true
+        reachedEnd = false
+    }
+
+    func playbackDidEnd() {
+        guard let video else { return }
+        reachedEnd = true; hasPlayed = true
+        if usesDurableProgress { persistSharedProgress(Double(video.duration), ended: true) }
+        else { Task { await saveProgress(position: Double(video.duration)) } }
+    }
+
+    func retryPlayback() {
+        Task {
+            if isLocalPlayback, video?.playbackIdentity != nil, authState.isAuthenticated {
+                stopPlayback(); bypassLocalSource = true; localPlayback = nil
+                await loadVideo()
+            }
+            playbackError = nil
+            startPlayback()
         }
     }
 
@@ -1940,7 +2069,35 @@ final class VideoDetailViewModel {
         errorMessage = nil
 
         do {
-            video = try await videoRepository.getVideo(id: videoId)
+            guard playbackAuthorizationID == authState.authorization?.id || (localPlayback != nil && authState.authorization == nil) else { throw CancellationError() }
+            if let playbackCoordinator, !bypassLocalSource,
+               let source = await playbackCoordinator.localSource(videoID: videoId, recordID: localPlayback?.record.id) {
+                localPlayback = source
+                var snapshot = source.record.libraryVideo
+                snapshot.playbackIdentity = playbackCoordinator.identity(for: source.record)
+                video = playbackCoordinator.project(snapshot)
+                if source.record.metadata?.sponsorSegments == nil, snapshot.playbackIdentity != nil, authState.accountConfirmed {
+                    let authorizationID = authState.authorization?.id
+                    metadataRefreshTask = Task { [weak self, repository = videoRepository] in
+                        await source.library.refreshDetails(source.record.id, using: repository)
+                        guard let self, !Task.isCancelled, self.authState.authorization?.id == authorizationID,
+                              self.localPlayback?.record.id == source.record.id,
+                              let updated = source.library.records.first(where: { $0.id == source.record.id }) else { return }
+                        var metadata = updated.libraryVideo
+                        metadata.playbackIdentity = playbackCoordinator.identity(for: updated)
+                        self.video = playbackCoordinator.project(metadata)
+                    }
+                }
+            } else {
+                if playbackCoordinator != nil { localPlayback = nil }
+                video = try await videoRepository.getVideo(id: videoId)
+                // Legacy bytes can be reused after matching server metadata, while
+                // its unowned device bookmark stays separate until explicit adoption.
+                if let playbackCoordinator, !bypassLocalSource, let video,
+                   let source = await playbackCoordinator.localSource(videoID: videoId, matching: video) {
+                    localPlayback = source
+                }
+            }
         } catch {
             router.handleError(error, errorMessage: &errorMessage)
         }
@@ -1963,7 +2120,7 @@ final class VideoDetailViewModel {
     }
 
     func loadComments() async {
-        guard !isLocalPlayback else { return }
+        guard !isPrivatePlayback else { return }
         isLoadingComments = true
         do {
             comments = try await videoRepository.getComments(videoId: videoId)
@@ -1980,13 +2137,12 @@ final class VideoDetailViewModel {
         isLoadingSimilar = false
     }
 
-    /// Persists the current playback position. Returns `true` on success so
-    /// callers (notably the 30s progress observer) can advance the
-    /// "confirmed saved" cursor only when the POST actually landed; a
-    /// failed POST leaves `lastSavedPosition` behind so the next tick
-    /// retries instead of being debounced out.
+    /// Scoped/local playback succeeds once its bookmark is durable; server sync
+    /// is separate. The compatibility server-only path succeeds after its POST,
+    /// so its older debounce observer can retry a failed network save.
     @discardableResult
     func saveProgress(position: Double) async -> Bool {
+        if usesDurableProgress { return persistSharedProgress(position) }
         do {
             try await videoRepository.updateProgress(videoId: videoId, position: position)
             return true
@@ -1997,13 +2153,16 @@ final class VideoDetailViewModel {
     }
 
     func toggleWatched() async {
+        if playbackCoordinator != nil { stopPlayback() }
         guard var updatedVideo = video else { return }
         let newValue = !updatedVideo.watched
         updatedVideo.watched = newValue
         video = updatedVideo
 
         do {
-            try await videoRepository.setWatched(videoId: videoId, isWatched: newValue)
+            if let playbackCoordinator, let identity = updatedVideo.playbackIdentity {
+                try playbackCoordinator.setWatched(newValue, identity: identity, duration: Double(updatedVideo.duration))
+            } else { try await videoRepository.setWatched(videoId: videoId, isWatched: newValue) }
             router.markWatchedChanged(videoId, isWatched: newValue)
         } catch {
             updatedVideo.watched = !newValue

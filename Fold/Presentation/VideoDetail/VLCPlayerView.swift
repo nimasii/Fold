@@ -13,10 +13,12 @@ struct VLCPlayerView: UIViewControllerRepresentable {
     var sponsorBlockSeekTarget: Double?
     var seekDelta: Double?
     var onSeekDeltaConsumed: (() -> Void)?
+    var onPlaybackEnded: () -> Void = {}
+    var onPlaybackResumed: () -> Void = {}
     var onDoubleTap: ((_ forward: Bool) -> Void)?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onTimeChanged: onTimeChanged, onDoubleTap: onDoubleTap, isFullScreen: $isFullScreen)
+        Coordinator(onTimeChanged: onTimeChanged, onDoubleTap: onDoubleTap, isFullScreen: $isFullScreen, onPlaybackEnded: onPlaybackEnded, onPlaybackResumed: onPlaybackResumed)
     }
 
     func makeUIViewController(context: Context) -> VLCPlayerContainerVC {
@@ -33,16 +35,16 @@ struct VLCPlayerView: UIViewControllerRepresentable {
     func updateUIViewController(_ vc: VLCPlayerContainerVC, context: Context) {
         context.coordinator.isFullScreen = $isFullScreen
         context.coordinator.onTimeChanged = onTimeChanged
+        context.coordinator.onPlaybackEnded = onPlaybackEnded
+        context.coordinator.onPlaybackResumed = onPlaybackResumed
         context.coordinator.onDoubleTap = onDoubleTap
         vc.doubleTapRecognizer?.isEnabled = onDoubleTap != nil
-        if let target = sponsorBlockSeekTarget, vc.playerState.duration > 0 {
-            let position = Float(target / vc.playerState.duration)
-            vc.mediaPlayer?.position = min(max(position, 0), 1)
+        if let target = sponsorBlockSeekTarget, vc.playerState.duration > 0, abs(vc.playerState.currentTime - target) > 0.5 {
+            vc.seek(to: target)
         }
         if let delta = seekDelta, vc.playerState.duration > 0 {
             let newTime = max(0, min(vc.playerState.duration, vc.playerState.currentTime + delta))
-            let position = Float(newTime / vc.playerState.duration)
-            vc.mediaPlayer?.position = min(max(position, 0), 1)
+            vc.seek(to: newTime)
             DispatchQueue.main.async { onSeekDeltaConsumed?() }
         }
     }
@@ -54,12 +56,16 @@ extension VLCPlayerView {
     class Coordinator: NSObject, VLCMediaPlayerDelegate, UIGestureRecognizerDelegate {
         var isFullScreen: Binding<Bool>
         var onTimeChanged: (Double) -> Void
+        var onPlaybackEnded: () -> Void
+        var onPlaybackResumed: () -> Void
         var onDoubleTap: ((_ forward: Bool) -> Void)?
         weak var containerVC: VLCPlayerContainerVC?
         private var lastProgressReport: Date = .distantPast
 
-        init(onTimeChanged: @escaping (Double) -> Void, onDoubleTap: ((_ forward: Bool) -> Void)? = nil, isFullScreen: Binding<Bool>) {
+        init(onTimeChanged: @escaping (Double) -> Void, onDoubleTap: ((_ forward: Bool) -> Void)? = nil, isFullScreen: Binding<Bool>, onPlaybackEnded: @escaping () -> Void = {}, onPlaybackResumed: @escaping () -> Void = {}) {
             self.isFullScreen = isFullScreen
+            self.onPlaybackEnded = onPlaybackEnded
+            self.onPlaybackResumed = onPlaybackResumed
             self.onTimeChanged = onTimeChanged
             self.onDoubleTap = onDoubleTap
         }
@@ -78,33 +84,64 @@ extension VLCPlayerView {
             true
         }
 
-        func mediaPlayerTimeChanged(_ aNotification: Notification) {
-            guard let player = aNotification.object as? VLCMediaPlayer else { return }
-            let seconds = Double(player.time.intValue) / 1000.0
-            let totalDuration = Double(abs(player.remainingTime?.intValue ?? 0)) / 1000.0 + seconds
+        private var seekGate = PlaybackSeekGate()
+        var isSeekPending: Bool { seekGate.target != nil }
+        func setPlaying(_ value: Bool) { seekGate.setPlaying(value) }
 
-            Task { @MainActor in
-                self.containerVC?.playerState.currentTime = seconds
-                if totalDuration > 0 { self.containerVC?.playerState.duration = totalDuration }
+        func beginSeek(_ target: Double, report: Bool) {
+            seekGate.begin(target)
+            containerVC?.playerState.confirmedSeekTarget = -1
+            containerVC?.playerState.confirmedSeekTime = -1
+            containerVC?.playerState.currentTime = target
+            if report { onTimeChanged(target) }
+        }
+
+        func reportTime(_ player: VLCMediaPlayer, force: Bool = false) {
+            guard containerVC?.mediaPlayer === player else { return }
+            // Read on the MainActor at execution time, never a timestamp captured
+            // by an older delegate notification before a seek.
+            let seconds = Double(player.time.intValue) / 1000
+            containerVC?.playerState.engineTime = seconds
+            let duration = Double(player.media?.length.intValue ?? 0) / 1000
+            if duration > 0 { containerVC?.playerState.duration = duration }
+            let requested = seekGate.target
+            let elapsed = seekGate.elapsed()
+            guard seekGate.accept(seconds) else { return }
+            if let requested {
+                containerVC?.playerState.confirmedSeekTarget = requested
+                containerVC?.playerState.confirmedSeekTime = seconds
+                containerVC?.playerState.confirmedSeekElapsed = elapsed
             }
-
-            if seconds > 0, Date().timeIntervalSince(lastProgressReport) >= 1 {
+            containerVC?.playerState.currentTime = seconds
+            if force || Date().timeIntervalSince(lastProgressReport) >= 1 {
                 lastProgressReport = Date()
                 onTimeChanged(seconds)
             }
         }
 
+        func mediaPlayerTimeChanged(_ aNotification: Notification) {
+            guard let player = aNotification.object as? VLCMediaPlayer else { return }
+            Task { @MainActor [weak self, weak player] in
+                guard let self, let player else { return }
+                self.reportTime(player)
+            }
+        }
+
         func mediaPlayerStateChanged(_ aNotification: Notification) {
             guard let player = aNotification.object as? VLCMediaPlayer else { return }
-            let state = player.state
-            Task { @MainActor in
+            Task { @MainActor [weak self, weak player] in
+                guard let self, let player, self.containerVC?.mediaPlayer === player else { return }
+                let state = player.state
+                self.setPlaying(player.isPlaying)
                 self.containerVC?.playerState.isPlaying = player.isPlaying
-                if player.isPlaying { self.containerVC?.scheduleHideControls() }
+                if player.isPlaying { self.onPlaybackResumed(); self.containerVC?.scheduleHideControls() }
                 else { self.containerVC?.showPausedControls() }
+                if state == .paused { self.reportTime(player, force: true) }
                 if state == .error {
                     logger.error("Player state: error, attempting restart")
                     self.containerVC?.restartMedia()
                 } else if state == .ended {
+                    self.onPlaybackEnded()
                     self.containerVC?.exitFullScreenIfNeeded()
                 }
             }
@@ -127,6 +164,7 @@ class VLCPlayerContainerVC: UIViewController {
     fileprivate var controlsHost: UIHostingController<VLCPlayerControls>?
     fileprivate weak var doubleTapRecognizer: UITapGestureRecognizer?
     private var hideTimer: Timer?
+    private var seekConfirmationTask: Task<Void, Never>?
 
     init(mediaURL: URL, startPosition: Double, duration: Double, coordinator: VLCPlayerView.Coordinator) {
         let state = VLCPlayerState()
@@ -172,6 +210,7 @@ class VLCPlayerContainerVC: UIViewController {
     }
 
     func cleanup() {
+        seekConfirmationTask?.cancel(); seekConfirmationTask = nil
         hideTimer?.invalidate()
         hideTimer = nil
         mediaPlayer?.stop()
@@ -185,13 +224,14 @@ class VLCPlayerContainerVC: UIViewController {
         let media = VLCMedia(url: mediaURL)
         media.addOptions(["network-caching": 3000])
         mediaPlayer?.media = media
+        if resumePosition > 0 { coordinator?.beginSeek(resumePosition, report: false) }
+        coordinator?.setPlaying(true)
         mediaPlayer?.play()
 
         if resumePosition > 0, playerState.duration > 0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self, let player = self.mediaPlayer else { return }
-                let position = Float(resumePosition / self.playerState.duration)
-                player.position = min(max(position, 0), 1)
+                player.time = VLCTime(int: Int32(min(resumePosition * 1000, Double(Int32.max))))
             }
         }
     }
@@ -218,13 +258,14 @@ class VLCPlayerContainerVC: UIViewController {
         player.drawable = drawableView
         player.media = media
         self.mediaPlayer = player
+        if startPosition > 0 { coordinator?.beginSeek(startPosition, report: false) }
+        coordinator?.setPlaying(true)
         player.play()
 
         if startPosition > 0 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self, let player = self.mediaPlayer else { return }
-                let position = Float(self.startPosition / max(self.initialDuration, 1))
-                player.position = min(max(position, 0), 1)
+                player.time = VLCTime(int: Int32(min(self.startPosition * 1000, Double(Int32.max))))
             }
         }
 
@@ -266,16 +307,27 @@ class VLCPlayerContainerVC: UIViewController {
 
     private func togglePlayPause() {
         guard let player = mediaPlayer else { return }
-        if player.isPlaying { player.pause(); showPausedControls() }
-        else { player.play(); scheduleHideControls() }
+        if player.isPlaying { coordinator?.setPlaying(false); player.pause(); coordinator?.reportTime(player, force: true); showPausedControls() }
+        else { coordinator?.setPlaying(true); player.play(); scheduleHideControls() }
     }
 
-    private func seek(to seconds: Double) {
+    fileprivate func seek(to seconds: Double) {
         guard let player = mediaPlayer, playerState.duration > 0 else { return }
         let target = min(max(seconds, 0), playerState.duration)
-        player.position = Float(target / playerState.duration)
-        playerState.currentTime = target
-        scheduleHideControls()
+        coordinator?.beginSeek(target, report: true)
+        player.time = VLCTime(int: Int32(min(target * 1000, Double(Int32.max))))
+        // VLC 3 caches its clock while paused. Keep the requested bookmark;
+        // actual clock callbacks confirm it after the player resumes.
+        seekConfirmationTask?.cancel()
+        seekConfirmationTask = Task { @MainActor [weak self, weak player] in
+            for _ in 0..<30 {
+                do { try await Task.sleep(for: .milliseconds(50)) } catch { return }
+                guard let self, let player, self.mediaPlayer === player else { return }
+                self.coordinator?.reportTime(player, force: true)
+                if self.coordinator?.isSeekPending == false { return }
+            }
+        }
+        if player.isPlaying { scheduleHideControls() } else { showPausedControls() }
     }
 
     private func toggleFullScreen() {

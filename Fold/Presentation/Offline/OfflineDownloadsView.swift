@@ -2,6 +2,8 @@ import SwiftUI
 
 struct OfflineDownloadsView: View {
     var videoRepository: VideoRepositoryProtocol? = nil
+    @Environment(\.playbackCoordinator) private var history
+    @State private var linking: OfflineRecord?
     @Environment(OfflineLibrary.self) private var library
     @Environment(AuthState.self) private var authState
     @Environment(AppRouter.self) private var router
@@ -13,8 +15,8 @@ struct OfflineDownloadsView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var artworkRequestRevision = 0
 
-    private var completed: [OfflineRecord] { filter == .transfers ? [] : library.records.filter { $0.status == .ready } }
-    private var transfers: [OfflineRecord] { filter == .ready ? [] : library.records.filter { $0.status != .ready } }
+    private var completed: [OfflineRecord] { filter == .transfers ? [] : library.records.filter { $0.status == .ready && (authState.playbackAccount == nil || $0.account == nil || $0.account == authState.playbackAccount) } }
+    private var transfers: [OfflineRecord] { filter == .ready ? [] : library.records.filter { $0.status != .ready && (authState.playbackAccount == nil || $0.account == nil || $0.account == authState.playbackAccount) } }
 
     var body: some View {
         ScrollView {
@@ -42,8 +44,13 @@ struct OfflineDownloadsView: View {
                 if !completed.isEmpty {
                     MediaSectionHeading(title: String(localized: "stream_ready"))
                     AdaptiveVideoGrid(
-                        videos: completed.map(\.displayVideo),
-                        onVideoTap: { id in playing = completed.first { $0.id.uuidString == id } },
+                        videos: completed.map { history?.display($0) ?? $0.displayVideo },
+                        onVideoTap: { id in
+                            guard let record = completed.first(where: { $0.id.uuidString == id }) else { return }
+                            if record.account == nil, authState.accountConfirmed, let account = authState.playbackAccount,
+                               URL(string: account.server).map(RequestAuthorization.origin) == record.origin { linking = record }
+                            else { playing = record }
+                        },
                         localArtwork: Dictionary(uniqueKeysWithValues: completed.map { ($0.id.uuidString, artwork($0)) }),
                         supplementaryText: Dictionary(uniqueKeysWithValues: completed.map {
                             ($0.id.uuidString, library.refreshingDetails.contains($0.id) ? String(localized: "offline_refreshing_details") : $0.formattedSize)
@@ -87,9 +94,26 @@ struct OfflineDownloadsView: View {
             }
         }
         .navigationDestination(item: $playing) { record in
-            OfflinePlayerScreen(record: record, library: library, authState: authState, router: router, settings: playbackSettings, metadataRepository: videoRepository)
+            OfflinePlayerScreen(record: record, library: library, authState: authState, router: router, settings: playbackSettings, metadataRepository: videoRepository, playbackCoordinator: history)
                 .toolbar(.hidden, for: .tabBar)
         }
+        .confirmationDialog(String(localized: "history_link_title"), isPresented: Binding(get: { linking != nil }, set: { if !$0 { linking = nil } }), titleVisibility: .visible) {
+            Button(String(localized: "history_use_account")) {
+                guard let record = linking, let account = authState.playbackAccount else { return }
+                linking = nil
+                Task {
+                    // Import the authenticated account's point, never guess that the
+                    // old device bookmark belongs to this account.
+                    let metadata = try? await videoRepository?.getVideo(id: record.videoID)
+                    let position = history?.history?.bookmark(for: PlaybackIdentity(account: account, videoID: record.videoID))?.position ?? 0
+                    if library.linkHistory(record.id, account: account, position: position, video: metadata) {
+                        playing = library.records.first { $0.id == record.id }
+                    }
+                }
+            }
+            Button(String(localized: "history_keep_private")) { playing = linking; linking = nil }
+            Button(String(localized: "cancel"), role: .cancel) { linking = nil }
+        } message: { Text(String(localized: "history_link_help")) }
         .onChange(of: playing?.id) { router.isPrivatePlayerVisible = playing != nil }
         .confirmationDialog(String(localized: "offline_remove_title"), isPresented: Binding(
             get: { removing != nil }, set: { if !$0 { removing = nil } }), titleVisibility: .visible) {
@@ -179,12 +203,13 @@ struct OfflinePlayerScreen: View {
     private let library: OfflineLibrary
     private let metadataRepository: VideoRepositoryProtocol?
 
-    init(record: OfflineRecord, library: OfflineLibrary, authState: AuthState, router: AppRouter, settings: SponsorBlockSettings, metadataRepository: VideoRepositoryProtocol? = nil) {
+    init(record: OfflineRecord, library: OfflineLibrary, authState: AuthState, router: AppRouter, settings: SponsorBlockSettings, metadataRepository: VideoRepositoryProtocol? = nil, playbackCoordinator: PlaybackCoordinator? = nil) {
         recordID = record.id; self.library = library; self.metadataRepository = metadataRepository
         let source = LocalVideoPlayback(record: record, library: library)
         _viewModel = State(wrappedValue: VideoDetailViewModel(
-            videoId: record.id.uuidString, videoRepository: LocalVideoRepository(source: source),
-            authState: authState, router: router, sponsorBlockSettings: settings, localPlayback: source))
+            videoId: record.account == nil ? record.id.uuidString : record.videoID,
+            videoRepository: record.account == nil ? LocalVideoRepository(source: source) : (metadataRepository ?? LocalVideoRepository(source: source)),
+            authState: authState, router: router, sponsorBlockSettings: settings, localPlayback: source, playbackCoordinator: playbackCoordinator))
     }
 
     var body: some View {

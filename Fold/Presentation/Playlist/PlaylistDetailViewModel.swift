@@ -4,7 +4,12 @@ import Foundation
 final class PlaylistDetailViewModel {
     let playlistId: String
     var playlist: Playlist?
-    var videos: [Video] = []
+    private var storedVideos: [Video] = []
+    private let playbackCoordinator: PlaybackCoordinator?
+    var videos: [Video] {
+        get { storedVideos.map { playbackCoordinator?.project($0) ?? $0 } }
+        set { storedVideos = newValue }
+    }
     var isLoading = true
     var isLoadingMore = false
     var errorMessage: String?
@@ -18,11 +23,12 @@ final class PlaylistDetailViewModel {
     private let playlistRepository: PlaylistRepositoryProtocol
     private let videoRepository: VideoRepositoryProtocol
 
-    init(playlistId: String, playlistRepository: PlaylistRepositoryProtocol, videoRepository: VideoRepositoryProtocol, router: AppRouter) {
+    init(playlistId: String, playlistRepository: PlaylistRepositoryProtocol, videoRepository: VideoRepositoryProtocol, router: AppRouter, playbackCoordinator: PlaybackCoordinator? = nil) {
         self.playlistId = playlistId
         self.playlistRepository = playlistRepository
         self.videoRepository = videoRepository
         self.router = router
+        self.playbackCoordinator = playbackCoordinator
     }
 
     func loadPlaylist() async {

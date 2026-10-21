@@ -1,6 +1,81 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "history_sync_pending" : {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved on this device. Server sync is pending."
+          }
+        }
+      }
+    },
+    "history_resume_earlier" : {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume earlier device bookmark"
+          }
+        }
+      }
+    },
+    "history_keep_private" : {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep device-only bookmark"
+          }
+        }
+      }
+    },
+    "history_link_help" : {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This older download has a device-only bookmark with no recorded account. Connect it to your current account to share Library progress. Your earlier device bookmark will be kept."
+          }
+        }
+      }
+    },
+    "history_link_title" : {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect watch history?"
+          }
+        }
+      }
+    },
+    "history_storage_error" : {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watch history could not be saved. Free up storage and try again."
+          }
+        }
+      }
+    },
+    "history_use_account" : {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use this account’s watch history"
+          }
+        }
+      }
+    },
     "error_permission_denied": {
       "localizations": {
         "en": {
