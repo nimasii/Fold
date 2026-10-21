@@ -5,15 +5,13 @@ struct SplashView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            Image("FoldMark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 120, height: 120)
+            FoldWordmark()
+            Text(String(localized: "cinema_tagline")).font(.subheadline).foregroundStyle(.secondary)
 
             ProgressView()
                 .controlSize(.regular)
 
             Spacer()
-        }
+        }.frame(maxWidth: .infinity).background(StreamingStyle.background)
     }
 }

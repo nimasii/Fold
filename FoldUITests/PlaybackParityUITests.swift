@@ -43,14 +43,18 @@ final class PlaybackParityUITests: XCTestCase {
     @MainActor private func exercise(_ app: XCUIApplication, vlc: Bool, name: String) async throws {
         XCTAssertTrue(app.buttons["Play"].waitForExistence(timeout: 10)); app.buttons["Play"].tap()
         XCTAssertTrue(app.buttons["Pin player"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.otherElements["video.player.surface"].firstMatch.waitForExistence(timeout: 10))
+        showControls(app, vlc: vlc)
         if vlc {
+            let pause = app.buttons["Pause"]
+            if !pause.exists { showControls(app, vlc: true) }
+            XCTAssertTrue(pause.exists); pause.tap()
             let elapsed = app.staticTexts["vlc.elapsed"]
             XCTAssertTrue(elapsed.waitForExistence(timeout: 10))
             let advanced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label != %@", "0:00"), object: elapsed)
             let result = await XCTWaiter.fulfillment(of: [advanced], timeout: 10)
             XCTAssertEqual(result, .completed)
             showControls(app, vlc: true)
-            XCTAssertTrue(app.buttons["Pause"].waitForExistence(timeout: 3)); app.buttons["Pause"].tap()
             capture(app, "vlc-\(name)-inline")
             app.sliders["vlc.timeline"].adjust(toNormalizedSliderPosition: 0.5)
             let sought = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label MATCHES %@", "0:0[4-8]"), object: elapsed)
@@ -68,14 +72,13 @@ final class PlaybackParityUITests: XCTestCase {
             try await Task.sleep(for: .seconds(1))
         } else {
             showControls(app, vlc: false)
+            let pause = app.buttons["Play/Pause"]
+            XCTAssertTrue(pause.exists); pause.tap()
             let elapsed = app.staticTexts["Elapsed Time"]
             XCTAssertTrue(elapsed.waitForExistence(timeout: 5))
             let advanced = XCTNSPredicateExpectation(predicate: NSPredicate(format: "NOT label BEGINSWITH %@", "0:00"), object: elapsed)
             let result = await XCTWaiter.fulfillment(of: [advanced], timeout: 8)
             XCTAssertEqual(result, .completed)
-            showControls(app, vlc: false)
-            let pause = app.buttons["Play/Pause"]
-            pause.tap()
             capture(app, "avkit-\(name)-inline")
             app.sliders["Current position"].adjust(toNormalizedSliderPosition: 0.5)
             let sought = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label MATCHES %@", "0:0[4-8].*"), object: elapsed)
@@ -101,7 +104,8 @@ final class PlaybackParityUITests: XCTestCase {
     @MainActor private func showControls(_ app: XCUIApplication, vlc: Bool) {
         let button = app.buttons[vlc ? "Full Screen" : "Fullscreen Button"]
         if !button.isHittable || (!vlc && !app.staticTexts["Elapsed Time"].exists) {
-            let surface = app.otherElements["video.player.surface"].firstMatch
+            let surface = app.descendants(matching: .any)["video.player.surface"].firstMatch
+            XCTAssertTrue(surface.waitForExistence(timeout: 10))
             surface.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: vlc ? 0.35 : 0.75)).tap()
         }
     }

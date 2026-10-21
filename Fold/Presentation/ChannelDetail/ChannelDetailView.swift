@@ -149,7 +149,7 @@ struct ChannelDetailView: View {
                             Label(channel.channelSubscribed ? String(localized: "channel_unsubscribe") : String(localized: "channel_subscribe"),
                                   systemImage: channel.channelSubscribed ? "checkmark" : "plus")
                         }
-                        .buttonStyle(.borderedProminent).controlSize(.large).buttonBorderShape(.capsule)
+                        .foldAction()
                         .accessibilityLabel(channel.channelSubscribed ? String(localized: "channel_unsubscribe") : String(localized: "channel_subscribe"))
                     }
                     if let description = channel.channelDescription, !description.isEmpty {

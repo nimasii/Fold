@@ -7,6 +7,12 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
     DownloadRepositoryProtocol, PlaylistRepositoryProtocol, SearchRepositoryProtocol,
     ChannelRepositoryProtocol {
 
+    private var scenario: String { ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--cinema-state=") }?.components(separatedBy: "=").last ?? "ready" }
+    private func prepareState() async throws {
+        if scenario == "loading" { try await Task.sleep(for: .seconds(30)) }
+        if scenario == "error" { throw AppError.unknown(message: "Fixture connection unavailable") }
+    }
+
     static let base = "http://127.0.0.1:18084"
     private(set) var videos: [Video] = {
         let names = [
@@ -36,7 +42,8 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
     private var subscriptions: [String: Bool] = [:]
 
     func getVideos(page: Int, sort: String, order: String, watch: String?, channel: String?, vidType: String?) async throws -> VideoListResult {
-        let filtered = videos.filter { video in
+        try await prepareState()
+        let filtered = scenario == "empty" ? [] : videos.filter { video in
             (channel == nil || video.channelId == channel)
             && (watch != "watched" || video.watched)
             && (watch != "unwatched" || !video.watched)
@@ -47,6 +54,7 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
     }
 
     func getVideo(id: String) async throws -> Video {
+        try await prepareState()
         return videos.first(where: { $0.youtubeId == id }) ?? videos[0]
     }
 
@@ -81,7 +89,8 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
     func logout() {}
 
     func getDownloads(page: Int, filter: String) async throws -> DownloadListResult {
-        let filtered = filter == "all" ? downloads : downloads.filter { $0.status == filter }
+        try await prepareState()
+        let filtered = scenario == "empty" ? [] : filter == "all" ? downloads : downloads.filter { $0.status == filter }
         return DownloadListResult(items: filtered, currentPage: 1, lastPage: 1)
     }
 
@@ -106,17 +115,20 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
     }
 
     func getPlaylists(page: Int, type: String?) async throws -> PlaylistListResult {
-        let filtered = playlists.filter { type == nil || $0.playlistType.rawValue == type }
+        try await prepareState()
+        let filtered = scenario == "empty" ? [] : playlists.filter { type == nil || $0.playlistType.rawValue == type }
         return PlaylistListResult(playlists: filtered, currentPage: 1, lastPage: 1)
     }
 
     func getPlaylist(id: String) async throws -> Playlist {
-        playlists.first(where: { $0.playlistId == id }) ?? playlists[0]
+        try await prepareState()
+        return playlists.first(where: { $0.playlistId == id }) ?? playlists[0]
     }
 
     func getPlaylistVideos(playlistId: String, page: Int) async throws -> VideoListResult {
+        try await prepareState()
         let ids = Set((playlists.first(where: { $0.playlistId == playlistId })?.playlistEntries ?? []).map(\.youtubeId))
-        let result = videos.filter { ids.contains($0.youtubeId) }
+        let result = scenario == "empty" ? [] : videos.filter { ids.contains($0.youtubeId) }
         return VideoListResult(videos: result, currentPage: 1, lastPage: 1, totalHits: result.count)
     }
 
@@ -135,10 +147,12 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
     }
 
     func search(query: String, page: Int) async throws -> SearchResult {
-        SearchResult(videos: videos.filter { ($0.title + " " + $0.channelName).localizedCaseInsensitiveContains(query) }, channels: [])
+        try await prepareState()
+        return SearchResult(videos: videos.filter { ($0.title + " " + $0.channelName).localizedCaseInsensitiveContains(query) }, channels: [])
     }
 
     func getChannel(id: String) async throws -> Channel {
+        try await prepareState()
         let lunar = id == "channel-lunar-notes"
         return Channel(channelId: id, channelName: lunar ? "Lunar Notes" : "Orbital Journal", channelThumbUrl: Self.base + (lunar ? "/art/moon.jpg" : "/art/orbit.jpg"), channelBannerUrl: Self.base + (lunar ? "/art/apollo.jpg" : "/art/earthrise.jpg"), channelDescription: "Illustrative films about the places beyond our everyday view. Test metadata and credited NASA stills; playback is a generated test clip.", channelSubscribed: subscriptions[id] ?? !lunar, channelSubs: lunar ? 1200 : 24800)
     }

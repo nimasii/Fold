@@ -68,11 +68,12 @@ struct ServerSignInView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(16)
-                .background(.bar)
+                .background(StreamingStyle.surface)
                 if browser.blocked { Text(String(localized: "login_redirect_blocked")).font(.caption).foregroundStyle(.red) }
                 if let error = viewModel.errorMessage { Text(error).font(.caption).foregroundStyle(.red).padding(.horizontal) }
                 ServerBrowserSurface(browser: browser)
             }
+            .background(StreamingStyle.background)
             .navigationTitle(String(localized: "login_server_title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -92,6 +93,7 @@ struct ServerSignInView: View {
             }
             .task { browser.webView.load(URLRequest(url: browser.url)) }
             .onDisappear { Task { await browser.clear() } }
+            .presentationDragIndicator(.visible)
         }
     }
 }

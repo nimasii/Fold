@@ -3,8 +3,11 @@ import SwiftUI
 /// Shared editorial hierarchy. Content stays opaque; system navigation supplies glass.
 enum StreamingStyle {
     static let gutter: CGFloat = 20
-    static let corner: CGFloat = 16
-    static let background = Color(.systemBackground)
+    static let corner: CGFloat = 14
+    static let background = Color("CinemaCanvas")
+    static let surface = Color("CinemaSurface")
+    static let elevated = Color("CinemaElevated")
+    static let accent = Color("CinemaAccent")
 }
 
 struct MediaSectionHeading: View {
@@ -30,53 +33,45 @@ struct MediaPressStyle: ButtonStyle {
     }
 }
 
+/// Compact hero preserves the full landscape thumbnail and exposes the first shelf.
 struct FeaturedVideo: View {
     let video: Video
     let onOpen: () -> Void
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
-        Group {
-            if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: 16) {
-                    artwork.aspectRatio(16 / 9, contentMode: .fit).clipShape(.rect(cornerRadius: StreamingStyle.corner))
-                    information
+        VStack(alignment: .leading, spacing: typeSize.isAccessibilitySize ? 16 : -64) {
+            Color.black.aspectRatio(16 / 9, contentMode: .fit)
+                .frame(maxHeight: sizeClass == .regular ? 320 : nil)
+                .overlay { AuthenticatedAsyncImage(url: video.thumbUrl) }
+                .overlay(alignment: .bottom) {
+                    LinearGradient(colors: [.clear, .black.opacity(0.9)], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 80)
                 }
-            } else {
-                Color(.secondarySystemBackground)
-                    .aspectRatio(0.95, contentMode: .fit)
-                    .overlay { artwork }
-                    .overlay {
-                        LinearGradient(colors: [.clear, .black.opacity(0.08), .black.opacity(0.96)], startPoint: .top, endPoint: .bottom)
-                    }
-                    .overlay(alignment: .bottomLeading) { information.padding(24).foregroundStyle(.white) }
-                    .clipShape(.rect(cornerRadius: 24))
+                .clipped().accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(String(localized: "cinema_your_library"))
+                    .font(.caption.weight(.semibold)).tracking(2).foregroundStyle(.secondary)
+                Text(video.title).font(.title.weight(.bold))
+                    .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("\(video.channelName) · \(video.durationStr)")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                Button(action: onOpen) {
+                    Label(String(localized: video.progress > 0 && !video.watched ? "cinema_resume" : "video_detail_play"), systemImage: "play.fill")
+                        .font(.headline).frame(maxWidth: .infinity, minHeight: 34)
+                }
+                .foldAction(prominent: true)
+                .frame(maxWidth: sizeClass == .regular ? 360 : .infinity)
+                .accessibilityIdentifier("library.featured.play")
+                .accessibilityLabel(String(localized: video.progress > 0 && !video.watched ? "cinema_resume" : "video_detail_play") + ", " + video.title)
             }
+            .foregroundStyle(.white)
+            .padding(.horizontal, StreamingStyle.gutter).padding(.bottom, 12)
         }
-        .padding(.horizontal, StreamingStyle.gutter)
+        .background(.black)
         .accessibilityIdentifier("watch.featured")
-    }
-    private var artwork: some View {
-        Color(.secondarySystemBackground)
-            .overlay { AuthenticatedAsyncImage(url: video.thumbUrl) }
-            .clipped().allowsHitTesting(false).accessibilityHidden(true)
-    }
-    private var information: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(String(localized: "stream_featured"))
-                .font(.caption.weight(.bold)).tracking(2)
-            Text(video.title).font(.largeTitle.bold()).lineLimit(typeSize.isAccessibilitySize ? nil : 3)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("\(video.channelName) · \(video.durationStr)").font(.subheadline.weight(.medium))
-            Button(action: onOpen) {
-                Label(String(localized: "stream_open_video"), systemImage: "arrow.up.right")
-                    .font(.headline).frame(maxWidth: .infinity, minHeight: 32)
-            }
-            .buttonStyle(.borderedProminent).controlSize(.large).buttonBorderShape(.capsule)
-            .tint(typeSize.isAccessibilitySize ? .accentColor : .white)
-            .foregroundStyle(typeSize.isAccessibilitySize ? Color.white : Color.black)
-            .accessibilityLabel(String(localized: "stream_open_video") + ", " + video.title)
-        }
     }
 }
 
@@ -90,7 +85,7 @@ struct VideoShelf: View {
         VStack(alignment: .leading, spacing: 14) {
             MediaSectionHeading(title: title)
             ScrollView(.horizontal) {
-                LazyHStack(alignment: .top, spacing: 16) {
+                LazyHStack(alignment: .top, spacing: 12) {
                     ForEach(videos) { video in
                         VideoCardView(video: video, onChannelTap: onChannel, onOpen: { onOpen(video.id) })
                             .frame(width: typeSize.isAccessibilitySize ? 300 : 260)
@@ -150,6 +145,7 @@ struct StreamingTabs<Destination: View>: View {
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
             }
         }
+        .tint(.primary)
         .tabViewSearchActivation(.searchTabSelection)
         .onChange(of: searchPresented) { _, presented in
             if !presented && router.isLibrarySearchActive && router.librarySearchPath.isEmpty {
@@ -260,7 +256,7 @@ struct StreamingTabs<Destination: View>: View {
                         .onAppear { legacyPlayerVisible = isPlayer(route) }
                         .onDisappear { if isPlayer(route) { legacyPlayerVisible = false } }
                 }
-        }
+        }.tint(StreamingStyle.accent)
     }
     private enum ShellSelection: Hashable { case section(AppTab), search }
 }

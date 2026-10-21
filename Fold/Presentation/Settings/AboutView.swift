@@ -10,6 +10,12 @@ struct AboutView: View {
     var body: some View {
         Form {
             Section {
+                VStack(spacing: 12) {
+                    FoldWordmark()
+                    Text(String(localized: "cinema_tagline")).font(.subheadline).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity).padding(.vertical, 28)
+            }.listRowBackground(Color.clear)
+            Section {
                 HStack {
                     Text(String(localized: "about_version"))
                     Spacer()
@@ -86,6 +92,7 @@ struct AboutView: View {
                 Text(String(localized: "about_links"))
             }
         }
+        .foldReadingSurface()
         .navigationTitle(String(localized: "about_title"))
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -98,9 +105,13 @@ private struct LicenseDetailView: View {
     var body: some View {
         ScrollView {
             Text(license)
-                .font(.caption)
-                .padding()
+                .font(.body)
+                .textSelection(.enabled)
+                .frame(maxWidth: 720, alignment: .leading)
+                .padding(StreamingStyle.gutter)
+                .frame(maxWidth: .infinity, alignment: .center)
         }
+        .foldReadingSurface()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
     }

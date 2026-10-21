@@ -53,7 +53,7 @@ struct VideoCardView: View {
                 .aspectRatio(16 / 9, contentMode: .fit)
                 .overlay {
                     AuthenticatedAsyncImage(url: video.thumbUrl, localFileURL: localArtwork?.thumbnail,
-                                            localRevision: localArtwork?.revision ?? 0)
+                                            localRevision: localArtwork?.revision ?? 0, serverVideoID: video.youtubeId)
                 }
                 .overlay(alignment: .bottomTrailing) {
                     Text(video.durationStr).font(.caption2.weight(.semibold)).monospacedDigit()
@@ -77,7 +77,7 @@ struct VideoCardView: View {
                 }
                 .clipShape(.rect(cornerRadius: StreamingStyle.corner))
                 .accessibilityHidden(true)
-            Text(video.title).font(.subheadline.weight(.semibold)).foregroundStyle(.primary)
+            Text(video.title).font(.callout.weight(.semibold)).foregroundStyle(.primary)
                 .lineLimit(typeSize.isAccessibilitySize ? nil : 3)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)

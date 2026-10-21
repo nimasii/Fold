@@ -9,14 +9,40 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section {
-                VStack(alignment: .leading, spacing: 12) {
-                    Image(systemName: "play.rectangle.fill").font(.largeTitle).foregroundStyle(.tint).accessibilityHidden(true)
-                    Text(String(localized: "stream_preferences_intro")).font(.title2.bold())
-                    if let address = authState.serverURL, let host = URL(string: address)?.host {
-                        Label(host, systemImage: "server.rack").font(.subheadline).foregroundStyle(.secondary)
+                if let address = authState.serverURL, let host = URL(string: address)?.host {
+                    HStack(alignment: .top, spacing: 12) {
+                        Image(systemName: "server.rack").accessibilityHidden(true)
+                        Text(host).fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel(String(localized: "stream_connection"))
+                            .accessibilityValue(host)
                     }
-                }.padding(.vertical, 12)
+                    .font(.subheadline).foregroundStyle(.secondary)
+                    .frame(minHeight: 44)
+                }
             } header: { Text(String(localized: "stream_connection")) }
+
+            Section {
+                Toggle(
+                    String(localized: "settings_double_tap_seek"),
+                    isOn: viewModel.doubleTapToSeekBinding
+                )
+                .accessibilityLabel(String(localized: "settings_double_tap_seek"))
+
+                if viewModel.isDoubleTapToSeekEnabled {
+                    Picker(
+                        String(localized: "settings_seek_interval"),
+                        selection: viewModel.seekIntervalBinding
+                    ) {
+                        ForEach(SponsorBlockSettings.seekIntervalOptions, id: \.self) { interval in
+                            Text(String(localized: "settings_seek_seconds \(interval)")).tag(interval)
+                        }
+                    }
+                    .accessibilityLabel(String(localized: "settings_seek_interval"))
+                }
+            } header: {
+                Text(String(localized: "settings_player"))
+            }
+
 
             Section {
                 Toggle(
@@ -43,28 +69,6 @@ struct SettingsView: View {
                     Text(String(localized: "settings_sponsorblock_categories"))
                 }
             }
-            Section {
-                Toggle(
-                    String(localized: "settings_double_tap_seek"),
-                    isOn: viewModel.doubleTapToSeekBinding
-                )
-                .accessibilityLabel(String(localized: "settings_double_tap_seek"))
-
-                if viewModel.isDoubleTapToSeekEnabled {
-                    Picker(
-                        String(localized: "settings_seek_interval"),
-                        selection: viewModel.seekIntervalBinding
-                    ) {
-                        ForEach(SponsorBlockSettings.seekIntervalOptions, id: \.self) { interval in
-                            Text(String(localized: "settings_seek_seconds \(interval)")).tag(interval)
-                        }
-                    }
-                    .accessibilityLabel(String(localized: "settings_seek_interval"))
-                }
-            } header: {
-                Text(String(localized: "settings_player"))
-            }
-
             if authState.isAuthenticated {
                 Section {
                     Button(String(localized: "video_list_logout"), systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
@@ -92,8 +96,9 @@ struct SettingsView: View {
         .confirmationDialog(String(localized: "video_list_logout"), isPresented: $showLogoutConfirmation, titleVisibility: .visible) {
             Button(String(localized: "video_list_logout"), role: .destructive) { router.handleUnauthorized() }
             Button(String(localized: "cancel"), role: .cancel) {}
-        }
+        } message: { Text(String(localized: "cinema_logout_help")) }
         .formStyle(.grouped)
+        .foldReadingSurface()
         .navigationTitle(String(localized: "settings_title"))
         .navigationBarTitleDisplayMode(.large)
     }

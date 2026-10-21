@@ -19,7 +19,16 @@ struct OfflineDownloadsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
+                CinemaIntroduction(eyebrow: String(localized: "cinema_downloads_eyebrow"), title: String(localized: "cinema_downloads_title"))
+                    .padding(.horizontal, StreamingStyle.gutter)
                 deviceHeader
+                Picker(String(localized: "nav_filters"), selection: $filter) {
+                    ForEach(OfflineListFilter.allCases, id: \.self) { option in Text(option.label).tag(option) }
+                }.pickerStyle(.segmented).padding(.horizontal, StreamingStyle.gutter)
+                if !completed.isEmpty {
+                    Label(String(localized: "cinema_offline_reassurance"), systemImage: "checkmark")
+                        .font(.caption).foregroundStyle(.secondary).padding(.horizontal, StreamingStyle.gutter)
+                }
                 if let error = library.storageError {
                     Label(error, systemImage: "exclamationmark.triangle").font(.footnote).foregroundStyle(.red).padding(.horizontal)
                 }
@@ -93,7 +102,7 @@ struct OfflineDownloadsView: View {
             NavigationStack {
                 Form {
                     Section {
-                        Label(String(localized: "offline_on_device"), systemImage: "iphone")
+                        Label(String(localized: UIDevice.current.userInterfaceIdiom == .pad ? "cinema_on_this_ipad" : "offline_on_device"), systemImage: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone")
                         LabeledContent(String(localized: "offline_storage_used"), value: library.totalSize)
                         Text(String(localized: "offline_private_help"))
                     }
@@ -104,6 +113,7 @@ struct OfflineDownloadsView: View {
                         Text(String(localized: "offline_legacy_artwork_help"))
                     }
                 }
+                .foldReadingSurface()
                 .navigationTitle(String(localized: "offline_info"))
                 .toolbar { ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "connection_done")) { showInfo = false }
@@ -116,7 +126,7 @@ struct OfflineDownloadsView: View {
     private var deviceHeader: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Label(String(localized: "stream_on_device"), systemImage: "iphone")
+                Label(String(localized: UIDevice.current.userInterfaceIdiom == .pad ? "cinema_on_this_ipad" : "stream_on_device"), systemImage: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Text(library.totalSize).font(.subheadline).foregroundStyle(.secondary)
@@ -127,8 +137,8 @@ struct OfflineDownloadsView: View {
             }.font(.subheadline).frame(minHeight: 44)
                 .accessibilityLabel(String(localized: "offline_info"))
                 .accessibilityIdentifier("downloads.info")
-            Divider()
-        }.padding(.horizontal, StreamingStyle.gutter)
+        }.padding(16).background(StreamingStyle.surface, in: .rect(cornerRadius: 18))
+            .padding(.horizontal, StreamingStyle.gutter)
     }
 
     private func artwork(_ record: OfflineRecord) -> LocalVideoArtwork {
@@ -137,8 +147,9 @@ struct OfflineDownloadsView: View {
 
     private func transferRow(_ record: OfflineRecord) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(record.title).font(.headline)
-            Text(record.status.label).font(.subheadline).foregroundStyle(.secondary)
+            CinemaVideoRow(video: record.displayVideo, localArtwork: artwork(record))
+            Label(record.status.label, systemImage: record.status.isActive ? "arrow.down.circle" : "exclamationmark.circle")
+                .font(.subheadline).foregroundStyle(.secondary)
             if record.status.isActive {
                 ProgressView(value: record.status == .preparing ? record.attempt.flatMap { library.preparationProgress[$0] } : (record.totalBytes > 0 ? min(1, Double(record.bytes) / Double(record.totalBytes)) : nil))
                     .accessibilityLabel(String(localized: "offline_progress"))
@@ -152,7 +163,8 @@ struct OfflineDownloadsView: View {
             Text(String(localized: "offline_prepare_help")).font(.caption).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading).padding()
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .background(StreamingStyle.surface, in: RoundedRectangle(cornerRadius: 18))
+        .task(id: artworkRequestRevision) { await library.ensureArtwork(record.id, using: videoRepository) }
         .contextMenu {
             Button(String(localized: "offline_remove"), systemImage: "trash", role: .destructive) { removing = record }
                 .accessibilityLabel(String(localized: "offline_remove"))

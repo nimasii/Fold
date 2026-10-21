@@ -4,7 +4,6 @@ struct AddToPlaylistSheet: View {
     let viewModel: VideoDetailViewModel
     @Environment(\.dismiss) private var dismiss
     @State private var showCreateAlert = false
-    @State private var newPlaylistName = ""
 
     private var regularPlaylists: [Playlist] {
         viewModel.allPlaylists.filter { $0.playlistType == .regular }
@@ -25,6 +24,7 @@ struct AddToPlaylistSheet: View {
     var body: some View {
         NavigationStack {
             playlistContent
+                .foldReadingSurface()
                 .navigationTitle(String(localized: "video_add_to_playlist"))
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -42,14 +42,8 @@ struct AddToPlaylistSheet: View {
                         }
                     }
                 }
-                .alert(String(localized: "playlist_create"), isPresented: $showCreateAlert) {
-                    TextField(String(localized: "playlist_name_placeholder"), text: $newPlaylistName)
-                    Button(String(localized: "cancel"), role: .cancel) {
-                        newPlaylistName = ""
-                    }
-                    Button(String(localized: "playlist_create_confirm")) {
-                        let name = newPlaylistName
-                        newPlaylistName = ""
+                .sheet(isPresented: $showCreateAlert) {
+                    CreatePlaylistSheet { name in
                         Task { await viewModel.createPlaylistAndAddVideo(name: name) }
                     }
                 }
@@ -58,6 +52,7 @@ struct AddToPlaylistSheet: View {
             await viewModel.loadPlaylists()
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     @ViewBuilder

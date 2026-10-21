@@ -17,6 +17,7 @@ struct FoldApp: App {
     var body: some Scene {
         WindowGroup {
             appContent
+                .tint(StreamingStyle.accent)
                 .environment(container)
                 .environment(container.router)
                 .environment(container.authState)
@@ -71,7 +72,8 @@ struct RootView: View {
                     }
                     .accessibilityLabel(String(localized: "offline_title"))
                 }
-                .navigationTitle("Tube Archivist")
+                .background(StreamingStyle.background)
+                .navigationTitle("")
                 .navigationBarTitleDisplayMode(.inline)
                 .navigationDestination(for: Route.self) { destination(for: $0) }
             }

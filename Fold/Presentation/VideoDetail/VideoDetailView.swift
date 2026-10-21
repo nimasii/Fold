@@ -7,6 +7,7 @@ private nonisolated let viewLogger = Logger(subsystem: "ru.mzhukov.TAClient", ca
 struct VideoDetailView: View {
     @Bindable var viewModel: VideoDetailViewModel
     @Environment(AuthState.self) private var authState
+    @Environment(AppRouter.self) private var router
 
     var body: some View {
         Group {
@@ -22,24 +23,17 @@ struct VideoDetailView: View {
         }
         .geometryGroup()
         .background(StreamingStyle.background)
-        .navigationTitle(viewModel.video?.title ?? "")
+        .navigationTitle(String(localized: viewModel.isLocalPlayback ? "cinema_on_device" : "cinema_now_showing"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 16) {
-                    if viewModel.isPlaying || viewModel.isLocalPlayback {
-                        Button {
-                            viewModel.isPinned.toggle()
-                        } label: {
-                            Image(systemName: viewModel.isPinned ? "pin.fill" : "pin")
-                        }
-                        .accessibilityLabel(String(localized: "video_detail_pin_player"))
-                    }
-                    if !viewModel.isLocalPlayback, let video = viewModel.video {
+                if !viewModel.isLocalPlayback {
+                Menu {
+                    if let video = viewModel.video {
                         Button {
                             Task { await viewModel.toggleWatched() }
                         } label: {
-                            Image(systemName: video.watched ? "eye.fill" : "eye")
+                            Label(video.watched ? String(localized: "video_mark_unwatched") : String(localized: "video_mark_watched"), systemImage: video.watched ? "eye.fill" : "eye")
                         }
                         .accessibilityLabel(video.watched
                             ? String(localized: "video_mark_unwatched")
@@ -49,7 +43,7 @@ struct VideoDetailView: View {
                         Button {
                             viewModel.showAddToPlaylistSheet = true
                         } label: {
-                            Image(systemName: "music.note.list")
+                            Label(String(localized: "video_add_to_playlist"), systemImage: "music.note.list")
                         }
                         .accessibilityLabel(String(localized: "video_add_to_playlist"))
                     }
@@ -57,11 +51,24 @@ struct VideoDetailView: View {
                         Button {
                             viewModel.showDeleteDialog = true
                         } label: {
-                            Image(systemName: "trash")
+                            Label(String(localized: "video_detail_delete_title"), systemImage: "trash")
                         }
                         .accessibilityLabel(String(localized: "video_detail_delete_title"))
                     }
+                } label: { Image(systemName: "ellipsis") }
+                .accessibilityLabel(String(localized: "more_actions"))
+                .accessibilityIdentifier("video.actions")
                 }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                    if viewModel.isPlaying || viewModel.isLocalPlayback {
+                        Button {
+                            viewModel.isPinned.toggle()
+                        } label: {
+                            Image(systemName: viewModel.isPinned ? "pin.fill" : "pin")
+                        }
+                        .accessibilityLabel(String(localized: "video_detail_pin_player"))
+                    }
             }
         }
         .confirmationDialog(
@@ -83,7 +90,11 @@ struct VideoDetailView: View {
             AddToPlaylistSheet(viewModel: viewModel)
         }
         .task {
+            let autoplayID = router.autoplayVideoID
+            router.autoplayVideoID = nil
             await viewModel.loadVideo()
+            guard !Task.isCancelled, viewModel.isViewVisible else { return }
+            if let video = viewModel.video, autoplayID == video.id { viewModel.startPlayback() }
         }
         .task {
             await viewModel.loadComments()
@@ -159,8 +170,7 @@ struct VideoDetailView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .foldControlSurface()
                 .padding(.horizontal, 8)
                 .padding(.top, 8)
 
@@ -179,8 +189,9 @@ struct VideoDetailView: View {
             VideoInfoSection(video: video,
                 onChannelTap: viewModel.isLocalPlayback ? nil : { viewModel.navigateToChannel($0) },
                 localArtwork: viewModel.localPlayback?.artwork,
-                showsStatistics: !viewModel.isLocalPlayback || viewModel.localPlayback?.record.metadata != nil)
-            if !viewModel.isLocalPlayback { OfflineDownloadButton(video: video) }
+                showsStatistics: !viewModel.isLocalPlayback || viewModel.localPlayback?.record.metadata != nil,
+                onPlay: viewModel.isPlaying ? nil : { viewModel.startPlayback() },
+                showsDownload: !viewModel.isLocalPlayback)
 
             if viewModel.isLocalPlayback {
                 Label(String(localized: "offline_playing_local"), systemImage: "internaldrive")
@@ -223,6 +234,7 @@ struct VideoDetailView: View {
                     )
                 }
             }
+            VideoTechnicalDetails(video: video, showsStatistics: !viewModel.isLocalPlayback || viewModel.localPlayback?.record.metadata != nil)
         }
         .padding(.vertical)
     }

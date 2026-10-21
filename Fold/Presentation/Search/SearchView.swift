@@ -17,6 +17,8 @@ struct SearchView: View {
     }
     private var content: some View {
         VStack(spacing: 0) {
+            CinemaIntroduction(eyebrow: String(localized: "video_list_search"), title: String(localized: "stream_search_intro"))
+                .padding(StreamingStyle.gutter)
             if !viewModel.videos.isEmpty {
                 HStack {
                     Text(String(localized: "search_result_count \(viewModel.videos.count)"))
@@ -50,7 +52,6 @@ struct SearchView: View {
         } else if viewModel.videos.isEmpty {
             VStack(alignment: .leading, spacing: 20) {
                 Image(systemName: "magnifyingglass").font(.largeTitle).foregroundStyle(.tint).accessibilityHidden(true)
-                Text(String(localized: "stream_search_intro")).font(.largeTitle.bold())
                 Text(String(localized: "stream_search_help")).font(.body).foregroundStyle(.secondary)
                 Spacer()
             }

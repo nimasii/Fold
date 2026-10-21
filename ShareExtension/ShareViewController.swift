@@ -225,36 +225,25 @@ class ShareViewModel {
 
 struct ShareOverlayView: View {
     let viewModel: ShareViewModel
-
     var body: some View {
-        ZStack {
-            Color.black.opacity(0.4)
-                .ignoresSafeArea()
-
-            VStack(spacing: 12) {
+        VStack(spacing: 20) {
+            Spacer()
+            Group {
                 switch viewModel.state {
-                case .loading:
-                    ProgressView()
-                        .controlSize(.large)
-                        .tint(.white)
-
-                case .success:
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.green)
-
-                case .error(let error):
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.red)
-                    Text(error.localizedMessage)
-                        .font(.footnote)
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
+                case .loading: ProgressView().controlSize(.large)
+                case .success: Image(systemName: "checkmark.circle.fill").font(.largeTitle).foregroundStyle(.green)
+                case .error: Image(systemName: "exclamationmark.circle").font(.largeTitle).foregroundStyle(.red)
                 }
+            }.accessibilityHidden(true)
+            switch viewModel.state {
+            case .loading: Text(String(localized: "share_adding")).font(.title2.weight(.semibold))
+            case .success: Text(String(localized: "share_added")).font(.title2.weight(.semibold))
+            case .error(let error): Text(error.localizedMessage).font(.title2.weight(.semibold))
             }
-            .padding(32)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            Spacer()
         }
+        .padding(32).multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
     }
 }

@@ -23,11 +23,9 @@ struct VideoListView: View {
             } else {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 28) {
-                        if !viewModel.isSelecting {
-                            playlistsEntry
-                        }
                         if showsDiscovery, let featured = viewModel.videos.first {
-                            FeaturedVideo(video: featured) { viewModel.navigateToVideo(featured.id) }
+                            FeaturedVideo(video: featured) { viewModel.playFeatured(featured.id) }
+                            playlistsEntry
                             if !continuing.isEmpty {
                                 VideoShelf(title: String(localized: "stream_continue"), videos: continuing,
                                     onOpen: viewModel.navigateToVideo, onChannel: viewModel.navigateToChannel)
@@ -35,6 +33,7 @@ struct VideoListView: View {
                             VideoShelf(title: String(localized: "stream_recent"), videos: Array(viewModel.videos.prefix(8)),
                                 onOpen: viewModel.navigateToVideo, onChannel: viewModel.navigateToChannel)
                         }
+                        if !showsDiscovery && !viewModel.isSelecting { playlistsEntry }
                         MediaSectionHeading(title: String(localized: "stream_browse"),
                             subtitle: viewModel.watchFilter.label + " · " + viewModel.sortOption.label)
                         AdaptiveVideoGrid(
@@ -77,8 +76,9 @@ struct VideoListView: View {
         }
         .background(StreamingStyle.background)
         .navigationTitle(String(localized: "stream_library"))
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .principal) { FoldWordmark(font: .title2) }
             ToolbarItem(placement: .topBarTrailing) {
                 SectionMenu(hasFilters: !viewModel.isSelecting) {
                     LibraryFilterActions(viewModel: viewModel)
@@ -86,8 +86,10 @@ struct VideoListView: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if viewModel.isSelecting { selectionActions }
-            else if viewModel.videos.isEmpty { playlistsEntry.padding(.vertical, 8) }
+            if viewModel.videos.isEmpty { playlistsEntry.padding(.vertical, 8) }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if viewModel.isSelecting { FoldGlassGroup { selectionActions } }
         }
         .task {
             if viewModel.videos.isEmpty {
@@ -124,9 +126,9 @@ struct VideoListView: View {
 
     private var playlistsEntry: some View {
         Button { viewModel.navigateToPlaylists() } label: {
-            Label(String(localized: "playlist_list_title"), systemImage: "rectangle.stack")
+            Label(String(localized: "playlist_list_title"), systemImage: "rectangle.stack").font(.subheadline.weight(.semibold))
         }
-        .buttonStyle(.bordered).buttonBorderShape(.capsule)
+        .foldAction()
         .accessibilityLabel(String(localized: "playlist_list_title"))
         .accessibilityIdentifier("library.playlists")
         .padding(.horizontal, StreamingStyle.gutter)
@@ -154,7 +156,7 @@ struct VideoListView: View {
                         .accessibilityLabel(String(localized: "selection_select_all"))
                     Button(String(localized: "cancel")) { viewModel.cancelSelection() }
                         .accessibilityLabel(String(localized: "cancel"))
-                }.buttonStyle(.bordered).controlSize(.large)
+                }.foldAction()
             }.scrollIndicators(.hidden)
         }.padding(.horizontal).padding(.vertical, 8).background(StreamingStyle.background)
     }

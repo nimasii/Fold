@@ -15,7 +15,7 @@ struct SectionMenu<Filters: View>: View {
                     Label(String(localized: "nav_filters"), systemImage: "line.3.horizontal.decrease")
                 }.accessibilityIdentifier("section.filters")
             }
-        } label: { Image(systemName: "ellipsis") }
+        } label: { Image(systemName: "ellipsis").frame(width: 44, height: 44).contentShape(Rectangle()) }
         .accessibilityLabel(String(localized: "more_actions"))
         .accessibilityIdentifier("section.menu")
     }

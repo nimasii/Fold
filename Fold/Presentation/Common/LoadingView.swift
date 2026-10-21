@@ -7,11 +7,8 @@ struct LoadingView: View {
         VStack(spacing: 12) {
             ProgressView()
                 .scaleEffect(1.2)
-            if let message {
-                Text(message)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            Text(message ?? String(localized: "cinema_loading"))
+                .font(.subheadline).foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

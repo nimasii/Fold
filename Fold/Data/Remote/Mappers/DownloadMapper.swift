@@ -14,7 +14,8 @@ enum DownloadMapper {
             published: DateFormatting.formatISO(dto.published, style: .short),
             status: dto.status ?? "pending",
             message: dto.message,
-            thumbUrl: resolveURL(dto.vidThumbUrl, baseURL: serverURL),
+            thumbUrl: ServerArtwork.resolve(dto.vidThumbUrl, baseURL: serverURL)
+                ?? ServerArtwork.videoFallbacks(youtubeId, baseURL: serverURL).first,
             vidType: dto.vidType ?? "videos",
             timestamp: dto.timestamp ?? 0
         )

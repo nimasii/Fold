@@ -12,6 +12,7 @@ enum AppTab: Int, CaseIterable {
 
 @Observable
 final class AppRouter {
+    var autoplayVideoID: String?
     var selectedTab: AppTab = .library
     var isPrivatePlayerVisible = false
     var librarySearchQuery = ""
@@ -54,6 +55,7 @@ final class AppRouter {
     func path(for tab: AppTab) -> NavigationPath { tabPaths[tab] ?? NavigationPath() }
     func setPath(_ path: NavigationPath, for tab: AppTab) { tabPaths[tab] = path }
     private func resetNavigation() {
+        autoplayVideoID = nil
         entryPath = NavigationPath()
         tabPaths.removeAll()
         selectedTab = .library

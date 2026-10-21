@@ -16,17 +16,18 @@ struct LoginView: View {
             VStack(alignment: .leading, spacing: 28) {
                 introduction
                 serverEntry
-                signInOptions
+                FoldGlassGroup { signInOptions }
                 savedDownloads
             }
             .frame(maxWidth: 520)
             .padding(.horizontal, StreamingStyle.gutter)
-            .padding(.vertical, 24)
+            .padding(.bottom, 24)
             .frame(maxWidth: .infinity)
         }
         .background(StreamingStyle.background)
         .scrollDismissesKeyboard(.interactively)
-        .navigationTitle("Fold")
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
@@ -45,19 +46,26 @@ struct LoginView: View {
 
     private var introduction: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Image("FoldMark")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 40, height: 40)
-                .accessibilityHidden(true)
-                .padding(.bottom, 4)
-            Text(String(localized: "stream_login_headline"))
-                .font(.largeTitle.bold())
+            FoldWordmark().environment(\.colorScheme, .dark).padding(.top, 52).padding(.bottom, 28)
+            Text(String(localized: "cinema_tagline"))
+                .font(.largeTitle.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
             Text(String(localized: "connection_tagline"))
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.subheadline).foregroundStyle(.white.opacity(0.85))
         }
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, StreamingStyle.gutter).padding(.bottom, 32)
+        .background {
+            GeometryReader { geometry in
+                Image("ConnectionOcean").resizable().scaledToFill()
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .overlay { LinearGradient(colors: [.black.opacity(0.05), .black.opacity(0.2), .black.opacity(0.95)], startPoint: .top, endPoint: .bottom) }
+                    .clipped().accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, -StreamingStyle.gutter)
     }
 
     private var serverEntry: some View {
@@ -102,9 +110,7 @@ struct LoginView: View {
             Button(action: beginSignIn) {
                 actionLabel("connection_sign_in", loading: viewModel.isLoading && !showToken)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            .buttonBorderShape(actionShape)
+            .foldAction(prominent: true)
             .disabled(viewModel.isLoading || !hasAddress)
             .accessibilityLabel(String(localized: "connection_sign_in"))
             .accessibilityValue(viewModel.isLoading ? String(localized: "connection_connecting") : "")
@@ -144,7 +150,7 @@ struct LoginView: View {
                 Button(action: connectToken) {
                     actionLabel("connection_token_button", loading: viewModel.isLoading)
                 }
-                .buttonStyle(.bordered).controlSize(.large).buttonBorderShape(actionShape)
+                .foldAction(prominent: true)
                 .disabled(viewModel.isLoading || !hasAddress || !hasToken)
                 .accessibilityLabel(String(localized: "connection_token_button"))
                 .accessibilityValue(viewModel.isLoading ? String(localized: "connection_connecting") : "")

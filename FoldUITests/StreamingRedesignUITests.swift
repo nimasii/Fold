@@ -110,7 +110,7 @@ final class StreamingRedesignUITests: XCTestCase {
         XCTAssertTrue(app.buttons["queue.rescan"].exists)
         capture(app, "06-queue-contextual-controls")
         app.buttons["queue.start"].tap(); app.buttons["queue.rescan"].tap()
-        app.textFields["queue.add-input"].tap(); app.textFields["queue.add-input"].typeText("TESTVIDEO01")
+        app.descendants(matching: .any)["queue.add-input"].firstMatch.tap(); app.descendants(matching: .any)["queue.add-input"].firstMatch.typeText("TESTVIDEO01")
         app.buttons["queue.add"].tap()
         if app.keyboards.buttons["Done"].isHittable { app.keyboards.buttons["Done"].tap() }
         let row = app.cells.containing(.staticText, identifier: "The Earth, from here").firstMatch

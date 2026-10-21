@@ -39,7 +39,15 @@ struct VLCPlayerControls: View {
     private var controlsBar: some View {
         VStack(spacing: 8) {
             Slider(
-                value: isSeeking ? $seekValue : .constant(state.currentTime),
+                value: Binding(
+                    get: { isSeeking ? seekValue : state.currentTime },
+                    set: { value in
+                        seekValue = value
+                        // VoiceOver and accessibility slider adjustments need not
+                        // emit the drag begin/end callbacks.
+                        if !isSeeking { onSeek(value) }
+                    }
+                ),
                 in: 0...max(state.duration, 1),
                 onEditingChanged: { editing in
                     if editing {
@@ -52,6 +60,7 @@ struct VLCPlayerControls: View {
                 }
             )
             .accessibilityIdentifier("vlc.timeline")
+            .accessibilityLabel(String(localized: "cinema_playback_position"))
 
             HStack {
                 Text(formatTime(isSeeking ? seekValue : state.currentTime))
@@ -83,7 +92,7 @@ struct VLCPlayerControls: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(.ultraThinMaterial)
+        .foldControlSurface()
         .foregroundStyle(.white)
     }
 

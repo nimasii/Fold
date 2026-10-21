@@ -19,9 +19,7 @@ struct ErrorView: View {
                 Button(String(localized: "retry")) {
                     onRetry()
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .buttonBorderShape(.capsule)
+                .foldAction()
                 .accessibilityLabel(String(localized: "retry"))
             }
         }

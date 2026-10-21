@@ -25,6 +25,16 @@ struct DownloadQueueView: View {
                 List {
                     ForEach(viewModel.items, id: \.id) { item in
                         DownloadItemRow(item: item)
+                            .accessibilityElement(children: .combine)
+                            .listRowBackground(StreamingStyle.background)
+                            .listRowSeparator(.hidden)
+                            .contextMenu {
+                                Button(String(localized: "download_action_download"), systemImage: "arrow.down.circle") { Task { await viewModel.downloadItem(videoId: item.youtubeId) } }
+                                Button(String(localized: viewModel.filter == "pending" ? "download_action_ignore" : "download_action_pending"), systemImage: "arrow.uturn.backward") {
+                                    Task { await viewModel.updateStatus(videoId: item.youtubeId, status: viewModel.filter == "pending" ? "ignore" : "pending") }
+                                }
+                                Button(String(localized: "download_action_delete"), systemImage: "trash", role: .destructive) { pendingDeletion = item }
+                            }
                             .onAppear {
                                 if nearEnd.contains(item.id) {
                                     Task { await viewModel.loadMoreIfNeeded() }
@@ -69,6 +79,7 @@ struct DownloadQueueView: View {
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .animation(reduceMotion ? nil : .default, value: viewModel.items)
                 .refreshable {
                     await viewModel.refresh()
@@ -85,7 +96,10 @@ struct DownloadQueueView: View {
         // The filter remains stable while progress and error content change below it.
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
-                queueControls.padding(.horizontal, StreamingStyle.gutter).padding(.vertical, 8)
+                CinemaIntroduction(eyebrow: String(localized: "cinema_queue_eyebrow"), title: String(localized: "cinema_queue_title"), subtitle: String(localized: "cinema_queue_help"))
+                    .padding(.horizontal, StreamingStyle.gutter).padding(.top, 12)
+                addLink
+                FoldGlassGroup { queueControls }.padding(.horizontal, StreamingStyle.gutter).padding(.vertical, 8)
                 if !viewModel.downloadProgress.isEmpty {
                     VStack(spacing: 6) {
                         ForEach(viewModel.downloadProgress, id: \.id) { info in
@@ -122,50 +136,6 @@ struct DownloadQueueView: View {
         }
         // Animate the banner/error inset appearing/disappearing on batch start/finish.
         .animation(reduceMotion ? nil : .default, value: viewModel.downloadProgress.isEmpty)
-        .safeAreaInset(edge: .top) {
-            if authState.isPrivileged {
-                HStack(spacing: 8) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "link").foregroundStyle(.secondary).accessibilityHidden(true)
-                        TextField(String(localized: "download_add_placeholder"), text: Bindable(viewModel).addInput)
-                            .textFieldStyle(.plain)
-                            .focused($isAddingFocused)
-                            .accessibilityLabel(String(localized: "download_add_placeholder"))
-                            .accessibilityIdentifier("queue.add-input")
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .submitLabel(.done)
-                            .onSubmit {
-                                isAddingFocused = false
-                                Task { await viewModel.addToQueue() }
-                            }
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 12)
-                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
-
-                    Button {
-                        isAddingFocused = false
-                        Task { await viewModel.addToQueue() }
-                    } label: {
-                        if viewModel.isAdding {
-                            ProgressView()
-                        } else {
-                            Text(String(localized: "download_add_button"))
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .buttonBorderShape(.capsule)
-                    .accessibilityLabel(String(localized: "download_add_button"))
-                    .accessibilityIdentifier("queue.add")
-                    .disabled(viewModel.addInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isAdding)
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-                .background(StreamingStyle.background)
-            }
-        }
         .confirmationDialog(String(localized: "download_action_delete"), isPresented: Binding(
             get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } }), titleVisibility: .visible) {
             Button(String(localized: "download_action_delete"), role: .destructive) {
@@ -173,7 +143,9 @@ struct DownloadQueueView: View {
                 pendingDeletion = nil
             }
             Button(String(localized: "cancel"), role: .cancel) { pendingDeletion = nil }
-        } message: { if let item = pendingDeletion { Text(item.title) } }
+        } message: {
+            if let item = pendingDeletion { Text(item.title + "\n\n" + String(localized: "cinema_queue_remove_help")) }
+        }
         .background(StreamingStyle.background)
         .navigationTitle(String(localized: "nav_queue"))
         .navigationBarTitleDisplayMode(.inline)
@@ -205,10 +177,61 @@ struct DownloadQueueView: View {
         }
     }
 
+    @ViewBuilder private var addLink: some View {
+            if authState.isPrivileged {
+                HStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "link").foregroundStyle(.secondary).accessibilityHidden(true)
+                        TextField(String(localized: "download_add_placeholder"), text: Bindable(viewModel).addInput, axis: .vertical)
+                            .lineLimit(1...3)
+                            .textFieldStyle(.plain)
+                            .frame(minHeight: 44)
+                            .focused($isAddingFocused)
+                            .accessibilityLabel(String(localized: "download_add_placeholder"))
+                            .accessibilityIdentifier("queue.add-input")
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .submitLabel(.done)
+                            .onSubmit {
+                                isAddingFocused = false
+                                Task { await viewModel.addToQueue() }
+                            }
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 2)
+                    .background(Color(.tertiarySystemFill), in: RoundedRectangle(cornerRadius: 14))
+
+                    Button {
+                        isAddingFocused = false
+                        Task { await viewModel.addToQueue() }
+                    } label: {
+                        if viewModel.isAdding {
+                            ProgressView()
+                        } else {
+                            Text(String(localized: "download_add_button"))
+                        }
+                    }
+                    .foldAction(prominent: true)
+                    .accessibilityLabel(String(localized: "download_add_button"))
+                    .accessibilityIdentifier("queue.add")
+                    .disabled(viewModel.addInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isAdding)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+                .background(StreamingStyle.background)
+            }
+    }
+
     private var queueControls: some View {
         HStack(spacing: 12) {
-            Text(String(localized: viewModel.filter == "pending" ? "download_filter_pending" : "download_filter_ignore"))
-                .font(.headline).accessibilityAddTraits(.isHeader)
+            Menu {
+                ForEach(["pending", "ignore"], id: \.self) { filter in
+                    Button(String(localized: filter == "pending" ? "download_filter_pending" : "download_filter_ignore")) { viewModel.filter = filter }
+                }
+            } label: {
+                Label(String(localized: viewModel.filter == "pending" ? "download_filter_pending" : "download_filter_ignore"), systemImage: "chevron.down")
+                    .font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true).frame(minHeight: 44)
+            }.accessibilityLabel(String(localized: "nav_filters"))
             Spacer(minLength: 8)
             if authState.isPrivileged {
                 if viewModel.downloadProgress.contains(where: { $0.canStop }) {
@@ -224,10 +247,10 @@ struct DownloadQueueView: View {
                         HStack(spacing: 6) {
                             if viewModel.isStartingDownload { ProgressView().controlSize(.mini) }
                             else { Image(systemName: "arrow.down") }
-                            Text(String(localized: "queue_start"))
-                        }.font(.subheadline.weight(.semibold)).lineLimit(1).frame(minHeight: 32)
+                            Text(String(localized: "queue_start")).fixedSize(horizontal: false, vertical: true)
+                        }.font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true).frame(minHeight: 44)
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.small)
+                    .foldAction(prominent: true)
                     .disabled(viewModel.isStartingDownload || viewModel.filter != "pending" || viewModel.items.isEmpty)
                     .accessibilityLabel(String(localized: "download_start_button"))
                     .accessibilityIdentifier("queue.start")
@@ -253,9 +276,9 @@ private struct DownloadItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            AuthenticatedAsyncImage(url: item.thumbUrl)
+            AuthenticatedAsyncImage(url: item.thumbUrl, serverVideoID: item.youtubeId)
                 .frame(width: typeSize.isAccessibilitySize ? 72 : 112, height: typeSize.isAccessibilitySize ? 72 : 64)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
@@ -289,7 +312,7 @@ private struct DownloadItemRow: View {
                 }
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 }
 

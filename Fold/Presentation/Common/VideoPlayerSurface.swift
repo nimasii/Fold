@@ -93,15 +93,10 @@ struct VideoPlayerSurface<Overlay: View>: View {
                         Button {
                             onPlay()
                         } label: {
-                            Circle()
-                                .fill(.black.opacity(0.6))
-                                .frame(width: 72, height: 72)
-                                .overlay {
-                                    Image(systemName: "play.fill")
-                                        .font(.title)
-                                        .foregroundStyle(.white)
-                                }
+                            Image(systemName: "play.fill").font(.title)
+                                .frame(width: 24, height: 24)
                         }
+                        .foldAction(prominent: true, shape: .circle)
                         .accessibilityLabel(String(localized: "video_detail_play"))
                     }
 
@@ -126,8 +121,7 @@ struct VideoPlayerSurface<Overlay: View>: View {
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
-                            .background(.ultraThinMaterial)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .foldControlSurface()
                             .padding(.horizontal, 8)
                             .padding(.top, 8)
 
@@ -147,13 +141,22 @@ struct VideoPlayerSurface<Overlay: View>: View {
 /// Shared pin/scroll behavior keeps the local detail screen in the normal navigation flow.
 struct VideoDetailLayout<Player: View, Details: View>: View {
     let isPinned: Bool
+    @Environment(\.horizontalSizeClass) private var sizeClass
     @ViewBuilder var player: () -> Player
     @ViewBuilder var details: () -> Details
     var body: some View {
         if isPinned {
-            VStack(spacing: 0) { player(); ScrollView { details() } }
+            VStack(spacing: 0) { fittedPlayer; ScrollView { fittedDetails } }
         } else {
-            ScrollView { VStack(spacing: 0) { player(); details() } }
+            ScrollView { VStack(spacing: 0) { fittedPlayer; fittedDetails } }
         }
+    }
+    private var fittedPlayer: some View {
+        player().frame(maxWidth: sizeClass == .regular ? 960 : .infinity)
+            .frame(maxWidth: .infinity).background(.black)
+    }
+    private var fittedDetails: some View {
+        details().frame(maxWidth: sizeClass == .regular ? 960 : .infinity)
+            .frame(maxWidth: .infinity)
     }
 }

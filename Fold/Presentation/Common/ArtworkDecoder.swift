@@ -16,6 +16,11 @@ enum ArtworkDecoder {
         return UIImage(cgImage: bitmap)
     }
 
+    nonisolated static func image(at url: URL) -> UIImage? {
+        guard url.isFileURL, let data = try? Data(contentsOf: url, options: .mappedIfSafe) else { return nil }
+        return image(from: data)
+    }
+
     nonisolated static func cost(of image: UIImage) -> Int {
         guard let bitmap = image.cgImage else { return 0 }
         return bitmap.bytesPerRow * bitmap.height

@@ -105,7 +105,7 @@ struct VideoMapperTests {
         #expect(video?.thumbUrl == "\(serverURL)/cache/thumb.jpg")
     }
 
-    @Test func absoluteThumbUrl_keptAsIs() {
+    @Test func foreignThumbUrl_isNotAuthenticated() {
         let dto = VideoDTO(
             youtubeId: "abc", title: "T", description: nil,
             published: nil, dateDownloaded: nil, active: nil, channel: nil,
@@ -114,7 +114,7 @@ struct VideoMapperTests {
             category: nil, tags: nil, streams: nil, sponsorblock: nil, playlist: nil
         )
         let video = VideoMapper.map(dto, serverURL: serverURL)
-        #expect(video?.thumbUrl == "https://cdn.example.com/thumb.jpg")
+        #expect(video?.thumbUrl == "")
     }
 
     @Test func nilThumbUrl_defaultsToEmpty() {

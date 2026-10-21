@@ -225,6 +225,11 @@ final class VideoListViewModel {
         }
     }
 
+    func playFeatured(_ videoId: String) {
+        router.autoplayVideoID = videoId
+        navigateToVideo(videoId)
+    }
+
     func navigateToVideo(_ videoId: String) {
         router.navigate(to: .videoDetail(videoId: videoId))
     }

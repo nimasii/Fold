@@ -16,18 +16,18 @@ struct PlaylistDetailView: View {
                     VStack(alignment: .leading, spacing: 16) {
                         playlistHeader
 
-                        AdaptiveVideoGrid(
-                            videos: viewModel.videos,
-                            onVideoTap: { videoId in
-                                viewModel.navigateToVideo(videoId)
-                            },
-                            onChannelTap: { channelId in
-                                viewModel.navigateToChannel(channelId)
-                            },
-                            onNearEnd: {
-                                Task { await viewModel.loadMoreVideos() }
+                        MediaSectionHeading(title: String(localized: "video_list_title"))
+                        if viewModel.videos.isEmpty {
+                            ContentUnavailableView(String(localized: "video_list_empty"), systemImage: "rectangle.stack")
+                        }
+                        LazyVStack(spacing: 16) {
+                            ForEach(viewModel.videos) { video in
+                                Button { viewModel.navigateToVideo(video.id) } label: { CinemaVideoRow(video: video) }
+                                    .buttonStyle(MediaPressStyle()).accessibilityLabel(video.title)
+                                    .accessibilityIdentifier("video.card." + video.id)
+                                    .onAppear { if video.id == viewModel.videos.last?.id { Task { await viewModel.loadMoreVideos() } } }
                             }
-                        )
+                        }.padding(.horizontal, StreamingStyle.gutter)
 
                         if viewModel.isLoadingMore {
                             ProgressView()
@@ -101,7 +101,7 @@ struct PlaylistDetailView: View {
                     Button { Task { await viewModel.toggleSubscription() } } label: {
                         Label(playlist.playlistSubscribed ? String(localized: "playlist_unsubscribe") : String(localized: "playlist_subscribe"),
                               systemImage: playlist.playlistSubscribed ? "checkmark" : "plus")
-                    }.buttonStyle(.borderedProminent).controlSize(.large).buttonBorderShape(.capsule)
+                    }.foldAction()
                         .accessibilityLabel(playlist.playlistSubscribed ? String(localized: "playlist_unsubscribe") : String(localized: "playlist_subscribe"))
                 }
             }.padding(.horizontal, StreamingStyle.gutter).padding(.top, 12)

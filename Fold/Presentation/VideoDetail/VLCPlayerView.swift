@@ -99,6 +99,8 @@ extension VLCPlayerView {
             let state = player.state
             Task { @MainActor in
                 self.containerVC?.playerState.isPlaying = player.isPlaying
+                if player.isPlaying { self.containerVC?.scheduleHideControls() }
+                else { self.containerVC?.showPausedControls() }
                 if state == .error {
                     logger.error("Player state: error, attempting restart")
                     self.containerVC?.restartMedia()
@@ -264,14 +266,15 @@ class VLCPlayerContainerVC: UIViewController {
 
     private func togglePlayPause() {
         guard let player = mediaPlayer else { return }
-        if player.isPlaying { player.pause() } else { player.play() }
-        scheduleHideControls()
+        if player.isPlaying { player.pause(); showPausedControls() }
+        else { player.play(); scheduleHideControls() }
     }
 
     private func seek(to seconds: Double) {
         guard let player = mediaPlayer, playerState.duration > 0 else { return }
-        let position = Float(seconds / playerState.duration)
-        player.position = min(max(position, 0), 1)
+        let target = min(max(seconds, 0), playerState.duration)
+        player.position = Float(target / playerState.duration)
+        playerState.currentTime = target
         scheduleHideControls()
     }
 
@@ -314,10 +317,17 @@ class VLCPlayerContainerVC: UIViewController {
         }
     }
 
-    private func scheduleHideControls() {
+    fileprivate func showPausedControls() {
         hideTimer?.invalidate()
         playerState.controlsVisible = true
+    }
+
+    fileprivate func scheduleHideControls() {
+        hideTimer?.invalidate()
+        playerState.controlsVisible = true
+        guard mediaPlayer?.isPlaying == true, !UIAccessibility.isVoiceOverRunning else { return }
         hideTimer = Timer.scheduledTimer(withTimeInterval: 3, repeats: false) { [weak self] _ in
+            guard self?.mediaPlayer?.isPlaying == true, !UIAccessibility.isVoiceOverRunning else { return }
             self?.playerState.controlsVisible = false
         }
     }

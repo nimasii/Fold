@@ -5,6 +5,7 @@ struct AuthenticatedAsyncImage: View {
     var placeholderColor: Color = Color(.secondarySystemBackground)
     var localFileURL: URL? = nil
     var localRevision = 0
+    var serverVideoID: String? = nil
     @Environment(AuthState.self) private var authState
     @State private var image: UIImage?
     @State private var loadTask: Task<Void, Never>?
@@ -31,6 +32,7 @@ struct AuthenticatedAsyncImage: View {
             image = nil
             loadIfNeeded()
         }
+        .onChange(of: authState.authorization?.id) { image = nil; loadIfNeeded() }
         .onChange(of: localFileURL) { image = nil; loadIfNeeded() }
         .onChange(of: localRevision) { image = nil; loadIfNeeded() }
         .onDisappear {
@@ -42,7 +44,11 @@ struct AuthenticatedAsyncImage: View {
         if let localFileURL {
             loadTask?.cancel()
             guard localFileURL.isFileURL else { return }
-            image = UIImage(contentsOfFile: localFileURL.path)
+            loadTask = Task {
+                let loaded = await Task.detached(priority: .utility) { ArtworkDecoder.image(at: localFileURL) }.value
+                guard !Task.isCancelled else { return }
+                image = loaded
+            }
             return
         }
         #if UI_REVIEW_PREVIEW
@@ -54,16 +60,22 @@ struct AuthenticatedAsyncImage: View {
             }
         }
         #else
-        guard image == nil,
-              let urlString = url,
-              !urlString.isEmpty,
-              let imageURL = URL(string: urlString) else { return }
-
+        guard image == nil else { return }
+        var candidates = [url].compactMap { $0 }.filter { !$0.isEmpty }
+        if let serverVideoID, let base = authState.serverURL {
+            candidates += ServerArtwork.videoFallbacks(serverVideoID, baseURL: base)
+        }
+        guard !candidates.isEmpty else { return }
         loadTask?.cancel()
+        let authorization = authState.authorization
+        let token = authState.token
         loadTask = Task {
-            let loaded = await ImageCache.shared.image(for: imageURL, token: authState.token, authorization: authState.authorization)
-            if !Task.isCancelled {
-                self.image = loaded
+            var attempted = Set<String>()
+            for candidate in candidates where attempted.insert(candidate).inserted {
+                guard !Task.isCancelled, let imageURL = URL(string: candidate) else { return }
+                let loaded = await ImageCache.shared.image(for: imageURL, token: token, authorization: authorization)
+                guard !Task.isCancelled, authState.authorization?.id == authorization?.id else { return }
+                if let loaded { image = loaded; return }
             }
         }
         #endif

@@ -16,6 +16,15 @@ struct VideoListViewModelTests {
         return (vm, router)
     }
 
+    @Test func featuredPlayRequestsAutoplayAndDetailNavigation() {
+        let (vm, router) = makeSUT()
+        vm.playFeatured("featured")
+        #expect(router.autoplayVideoID == "featured")
+        #expect(router.path.count == 1)
+        router.handleUnauthorized()
+        #expect(router.autoplayVideoID == nil)
+    }
+
     @Test func loadVideos_success_populatesVideos() async {
         let repo = MockVideoRepository()
         repo.getVideosHandler = { _, _, _, _, _, _ in

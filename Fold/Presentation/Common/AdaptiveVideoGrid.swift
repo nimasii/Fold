@@ -31,7 +31,7 @@ struct AdaptiveVideoGrid: View {
     var onToggleSelection: ((String) -> Void)? = nil
 
     @Environment(\.dynamicTypeSize) private var typeSize
-    private var columns: [GridItem] { [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 300 : 160), spacing: 16)] }
+    private var columns: [GridItem] { [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 300 : 160), spacing: 12, alignment: .top)] }
 
     var body: some View {
         let nearEnd = Set(videos.suffix(5).map(\.id))

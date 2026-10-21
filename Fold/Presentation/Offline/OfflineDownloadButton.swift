@@ -2,6 +2,7 @@ import SwiftUI
 
 struct OfflineDownloadButton: View {
     let video: Video
+    var compact = false
     @Environment(OfflineLibrary.self) private var library
     @Environment(AppRouter.self) private var router
 
@@ -16,10 +17,11 @@ struct OfflineDownloadButton: View {
                     Label(String(localized: record?.status == .ready ? "offline_downloaded" : "offline_download_action"),
                           systemImage: record?.status == .ready ? "checkmark.circle.fill" : "arrow.down.circle")
                 }
-                .buttonStyle(.bordered).controlSize(.large).buttonBorderShape(.capsule)
+                .labelStyle(CompactDownloadLabelStyle(compact: compact))
+                .foldAction()
                 .disabled(record?.status.isActive == true)
                 .accessibilityLabel(String(localized: record?.status == .ready ? "offline_downloaded" : "offline_download_action"))
-                Spacer(minLength: 4)
+                if !compact { Spacer(minLength: 4) }
                 if record?.status.isActive == true {
                     Button(String(localized: "offline_cancel"), systemImage: "stop.circle") {
                         if let record { library.cancel(record.id) }
@@ -36,9 +38,19 @@ struct OfflineDownloadButton: View {
             if let message = record?.failure?.message ?? library.storageError {
                 Text(message).font(.footnote).foregroundStyle(.secondary)
             }
-            Text(String(localized: "offline_prepare_help")).font(.caption).foregroundStyle(.secondary)
+            if !compact { Text(String(localized: "offline_prepare_help")).font(.caption).foregroundStyle(.secondary) }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 12)
+        .padding(.horizontal, compact ? 0 : StreamingStyle.gutter)
+        .padding(.vertical, compact ? 0 : 12)
+    }
+}
+
+private struct CompactDownloadLabelStyle: LabelStyle {
+    let compact: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 8) {
+            configuration.icon
+            if !compact { configuration.title }
+        }.frame(minWidth: compact ? 28 : nil, minHeight: 28)
     }
 }

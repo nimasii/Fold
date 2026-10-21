@@ -22,7 +22,7 @@ struct PlaylistListView: View {
                 )
             } else {
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 300 : 160), spacing: 16)], alignment: .leading, spacing: 24) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: typeSize.isAccessibilitySize ? 300 : 160), spacing: 12, alignment: .top)], alignment: .leading, spacing: 24) {
                         ForEach(viewModel.playlists) { playlist in
                             Button {
                                 viewModel.navigateToPlaylist(playlist.playlistId)
@@ -56,6 +56,10 @@ struct PlaylistListView: View {
                 }
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            CinemaIntroduction(eyebrow: String(localized: "cinema_collections_eyebrow"), title: String(localized: "cinema_collections"))
+                .padding(StreamingStyle.gutter).background(StreamingStyle.background)
+        }
         .background(StreamingStyle.background)
         .navigationTitle(String(localized: "playlist_list_title"))
         .navigationBarTitleDisplayMode(.large)
@@ -85,14 +89,12 @@ struct PlaylistListView: View {
                     Image(systemName: "plus")
                 }
                 .accessibilityLabel(String(localized: "playlist_create"))
+                .accessibilityIdentifier("playlist.create")
             }
         }
-        .alert(String(localized: "playlist_create"), isPresented: $viewModel.showCreateDialog) {
-            TextField(String(localized: "playlist_name_placeholder"), text: $viewModel.newPlaylistName)
-            Button(String(localized: "cancel"), role: .cancel) {
-                viewModel.newPlaylistName = ""
-            }
-            Button(String(localized: "playlist_create_confirm")) {
+        .sheet(isPresented: $viewModel.showCreateDialog) {
+            CreatePlaylistSheet { name in
+                viewModel.newPlaylistName = name
                 Task { await viewModel.createCustomPlaylist() }
             }
         }
@@ -117,7 +119,7 @@ private struct PlaylistRow: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Color(.secondarySystemBackground).aspectRatio(16 / 11, contentMode: .fit)
+            Color(.secondarySystemBackground).aspectRatio(16 / 9, contentMode: .fit)
                 .overlay { AuthenticatedAsyncImage(url: playlist.playlistThumbnail) }.clipped()
                 .overlay(alignment: .bottomLeading) {
                     Image(systemName: "rectangle.stack.fill").font(.body).foregroundStyle(.white)

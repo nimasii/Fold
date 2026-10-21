@@ -45,10 +45,10 @@ struct DateFormattingTests {
         #expect(DateFormatting.formatUnixTimestamp(nil) == "")
     }
 
-    @Test func formatUnixTimestamp_zero_returnsJan1970() {
+    @Test func formatUnixTimestamp_zero_matchesISOEpochInLocalTime() {
         let result = DateFormatting.formatUnixTimestamp(0)
         #expect(!result.isEmpty)
-        #expect(result.contains("1970"))
+        #expect(result == DateFormatting.formatISO("1970-01-01T00:00:00Z"))
     }
 
     @Test func formatUnixTimestamp_knownDate() {
