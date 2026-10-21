@@ -157,6 +157,7 @@ final class AppRouter {
     /// Returns `true` if the error was unauthorized (caller should stop further work).
     @discardableResult
     func handleError(_ error: Error, errorMessage: inout String?) -> Bool {
+        if error is CancellationError || (error as? URLError)?.code == .cancelled { return false }
         if let appError = error as? AppError, case .unauthorized = appError {
             handleUnauthorized()
             return true

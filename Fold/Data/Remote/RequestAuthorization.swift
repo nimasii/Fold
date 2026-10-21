@@ -9,6 +9,7 @@ nonisolated final class RequestAuthorization: @unchecked Sendable {
     let cookies: [HTTPCookie]
     private let lock = NSLock()
     private var revoked = false
+    private let authenticationProbe = AuthenticationProbe()
 
     init(baseURL: URL, token: String? = nil, cookies: [HTTPCookie] = []) {
         self.baseURL = baseURL
@@ -16,7 +17,10 @@ nonisolated final class RequestAuthorization: @unchecked Sendable {
         self.cookies = cookies.filter { Self.exactHost($0, url: baseURL) }
     }
 
-    func revoke() { lock.withLock { revoked = true } }
+    func revoke() {
+        lock.withLock { revoked = true }
+        Task { await authenticationProbe.cancelAll() }
+    }
     var isActive: Bool { lock.withLock { !revoked } }
 
     static func normalizedURL(_ input: String) -> URL? {
@@ -68,11 +72,57 @@ nonisolated final class RequestAuthorization: @unchecked Sendable {
         }
         // Django SessionAuthentication precedes token auth. Unsafe requests need CSRF.
         if !["GET", "HEAD", "OPTIONS", "TRACE"].contains(request.httpMethod ?? "GET"), !cookies.isEmpty {
-            guard let csrf = matching.first(where: { $0.name == "csrftoken" }) else { throw AppError.unauthorized }
+            guard let csrf = matching.first(where: { $0.name == "csrftoken" }) else { throw AppError.permissionDenied }
             request.setValue(csrf.value, forHTTPHeaderField: "X-CSRFToken")
             request.setValue(Self.csrfOrigin(baseURL), forHTTPHeaderField: "Origin")
             request.setValue(baseURL.absoluteString, forHTTPHeaderField: "Referer")
         }
+    }
+
+    /// Resource permissions, redirects and an unsupported artwork URL returning
+    /// the server's HTML app shell are not proof that a login expired. Confirm
+    /// ambiguous responses against authenticated ping using this same connection.
+    /// The denied operation is never retried or treated as successful.
+    func isAuthenticationFailure(_ response: HTTPURLResponse, using session: URLSession) async throws -> Bool {
+        try Task.checkCancellation()
+        guard isActive else { throw CancellationError() }
+        guard Self.isAuthenticationFailure(response) else { return false }
+        if response.statusCode == 401 { return true }
+        let pingURL = baseURL.appendingPathComponent("api/ping/")
+        if response.url?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ==
+            pingURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) { return true }
+        let rejected = try await authenticationProbe.check(authorization: self, session: session)
+        try Task.checkCancellation()
+        guard isActive else { throw CancellationError() }
+        return rejected
+    }
+
+    fileprivate func probeAuthentication(using session: URLSession) async throws -> Bool {
+        try Task.checkCancellation()
+        guard isActive else { throw CancellationError() }
+        let pingURL = baseURL.appendingPathComponent("api/ping/")
+        var request = URLRequest(url: pingURL, cachePolicy: .reloadIgnoringLocalCacheData)
+        request.timeoutInterval = 10
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try apply(to: &request)
+        let data: Data
+        let result: URLResponse
+        do { (data, result) = try await session.data(for: request) }
+        catch {
+            try Task.checkCancellation()
+            if (error as? URLError)?.code == .cancelled { throw CancellationError() }
+            guard isActive else { throw CancellationError() }
+            return false // An outage cannot prove the saved session expired.
+        }
+        try Task.checkCancellation()
+        guard isActive else { throw CancellationError() }
+        guard let http = result as? HTTPURLResponse else { return false }
+        if Self.isAuthenticationFailure(http) { return true }
+        if (200...299).contains(http.statusCode),
+           let ping = try? JSONDecoder().decode(AuthenticatedPing.self, from: data), ping.response == "pong" {
+            return ping.user == nil
+        }
+        return false
     }
 
     /// All native requests stop redirects, including same-host gateway handoffs.
@@ -81,6 +131,58 @@ nonisolated final class RequestAuthorization: @unchecked Sendable {
         [401, 403].contains(response.statusCode) || (300...399).contains(response.statusCode) ||
             ((200...299).contains(response.statusCode) && response.mimeType == "text/html")
     }
+}
+
+/// One bounded ping per connection while multiple denied resources are in flight.
+/// Cancellation removes only that caller; the last caller cancels the transport.
+/// No successful result is cached, so a later expiry is always rechecked.
+private actor AuthenticationProbe {
+    private var task: Task<Void, Never>?
+    private var probeID: UUID?
+    private var waiters: [UUID: CheckedContinuation<Bool, Error>] = [:]
+
+    func check(authorization: RequestAuthorization, session: URLSession) async throws -> Bool {
+        let waiterID = UUID()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard !Task.isCancelled, authorization.isActive else {
+                    continuation.resume(throwing: CancellationError()); return
+                }
+                waiters[waiterID] = continuation
+                guard task == nil else { return }
+                let id = UUID(); probeID = id
+                task = Task {
+                    do { complete(.success(try await authorization.probeAuthentication(using: session)), id: id) }
+                    catch { complete(.failure(error), id: id) }
+                }
+            }
+        } onCancel: {
+            Task { await self.cancel(waiterID) }
+        }
+    }
+
+    private func cancel(_ id: UUID) {
+        waiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
+        if waiters.isEmpty { task?.cancel(); task = nil; probeID = nil }
+    }
+
+    func cancelAll() {
+        task?.cancel(); task = nil; probeID = nil
+        let pending = waiters; waiters.removeAll()
+        for continuation in pending.values { continuation.resume(throwing: CancellationError()) }
+    }
+
+    private func complete(_ result: Result<Bool, Error>, id: UUID) {
+        guard probeID == id else { return }
+        task = nil; probeID = nil
+        let pending = waiters; waiters.removeAll()
+        for continuation in pending.values { continuation.resume(with: result) }
+    }
+}
+
+private nonisolated struct AuthenticatedPing: Decodable {
+    let response: String?
+    let user: Int?
 }
 
 nonisolated final class RejectRedirects: NSObject, URLSessionTaskDelegate {

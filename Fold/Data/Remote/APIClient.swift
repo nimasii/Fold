@@ -78,7 +78,9 @@ final class APIClient {
         request.httpMethod = endpoint.method.rawValue
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        try authState.authorization?.apply(to: &request)
+        let authorization = authState.authorization
+        try checkCurrentConnection(authorization)
+        try authorization?.apply(to: &request)
 
         if let body {
             request.httpBody = try JSONEncoder().encode(body)
@@ -88,22 +90,49 @@ final class APIClient {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
+            try checkCurrentConnection(authorization)
+            if (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw AppError.network(underlying: error)
         }
+        try checkCurrentConnection(authorization)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw AppError.network(underlying: nil)
         }
 
-        if RequestAuthorization.isAuthenticationFailure(httpResponse) { throw AppError.unauthorized }
+        let authenticationFailed: Bool
+        if let authorization {
+            authenticationFailed = try await authorization.isAuthenticationFailure(httpResponse, using: session)
+        } else { authenticationFailed = RequestAuthorization.isAuthenticationFailure(httpResponse) }
+        try checkCurrentConnection(authorization)
+        if authenticationFailed {
+            // Optional notification/task callers must not swallow a confirmed expiry.
+            if let authorization {
+                NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil,
+                    userInfo: ["authorizationID": authorization.id])
+            }
+            throw AppError.unauthorized
+        }
+        // A valid login does not make an HTML app shell a successful API action.
+        // In particular, requestVoid must not report a mutation as completed.
+        if (200...299).contains(httpResponse.statusCode), httpResponse.mimeType == "text/html" {
+            throw AppError.decoding(underlying: nil)
+        }
         switch httpResponse.statusCode {
         case 200...299:
             return data
-        case 401, 403:
-            throw AppError.unauthorized
+        case 403:
+            throw AppError.permissionDenied
         default:
             let message = String(data: data, encoding: .utf8)
             throw AppError.serverError(statusCode: httpResponse.statusCode, message: message)
+        }
+    }
+
+    private func checkCurrentConnection(_ authorization: RequestAuthorization?) throws {
+        try Task.checkCancellation()
+        guard authorization?.id == authState.authorization?.id, authorization?.isActive != false else {
+            throw CancellationError()
         }
     }
 

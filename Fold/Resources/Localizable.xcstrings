@@ -1,6 +1,22 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "error_permission_denied": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This account does not have permission for this server action. Your connection is still saved."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "У этой учётной записи нет прав на это действие сервера. Подключение сохранено."
+          }
+        }
+      }
+    },
     "cinema_playback_position" : {
       "localizations" : {
         "en" : {

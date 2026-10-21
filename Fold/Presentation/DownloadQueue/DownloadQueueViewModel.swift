@@ -157,7 +157,11 @@ final class DownloadQueueViewModel {
                     startPolling()
                 }
             }
-        } catch {}
+        } catch {
+            if let error = error as? AppError, case .unauthorized = error {
+                router.handleError(error, errorMessage: &errorMessage)
+            }
+        }
     }
 
     func startPolling() {
@@ -218,6 +222,15 @@ final class DownloadQueueViewModel {
         } catch is CancellationError {
             return false
         } catch {
+            if let error = error as? AppError {
+                switch error {
+                case .unauthorized, .permissionDenied:
+                    router.handleError(error, errorMessage: &errorMessage)
+                    return false
+                default: break
+                }
+            }
+            if Task.isCancelled || (error as? URLError)?.code == .cancelled { return false }
             // transient error — keep polling, retry next tick
             return true
         }
