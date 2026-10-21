@@ -1,0 +1,464 @@
+[
+  {
+    "page": 1,
+    "title": "01 \u00b7 Launch / restoring session",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 1
+  },
+  {
+    "page": 2,
+    "title": "02 \u00b7 Connect to server",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 2
+  },
+  {
+    "page": 3,
+    "title": "03 \u00b7 API token connection",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 3
+  },
+  {
+    "page": 4,
+    "title": "04 \u00b7 Server sign-in sheet",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 4
+  },
+  {
+    "page": 5,
+    "title": "05 \u00b7 Library / discovery",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 5
+  },
+  {
+    "page": 6,
+    "title": "05V \u00b7 Library / discovery \u00b7 phone viewport",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 6
+  },
+  {
+    "page": 7,
+    "title": "06 \u00b7 Library filters and sorting",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 7
+  },
+  {
+    "page": 8,
+    "title": "07 \u00b7 Library multi-selection",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 8
+  },
+  {
+    "page": 9,
+    "title": "08 \u00b7 Search introduction / editing",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 9
+  },
+  {
+    "page": 10,
+    "title": "09 \u00b7 Search results",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 10
+  },
+  {
+    "page": 11,
+    "title": "10 \u00b7 Channel detail",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 11
+  },
+  {
+    "page": 12,
+    "title": "10V \u00b7 Channel detail \u00b7 phone viewport",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 12
+  },
+  {
+    "page": 13,
+    "title": "11 \u00b7 Channel About expanded",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 13
+  },
+  {
+    "page": 14,
+    "title": "12 \u00b7 Channel multi-selection",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 14
+  },
+  {
+    "page": 15,
+    "title": "13 \u00b7 Playlists / collections",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 15
+  },
+  {
+    "page": 16,
+    "title": "13V \u00b7 Playlists / collections \u00b7 phone viewport",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 16
+  },
+  {
+    "page": 17,
+    "title": "14 \u00b7 Playlist filter",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 17
+  },
+  {
+    "page": 18,
+    "title": "15 \u00b7 Create playlist dialog",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 18
+  },
+  {
+    "page": 19,
+    "title": "16 \u00b7 Regular playlist detail",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 19
+  },
+  {
+    "page": 20,
+    "title": "17 \u00b7 Custom playlist detail",
+    "pdf": "Fold-design-review-part-1.pdf",
+    "pageInPDF": 20
+  },
+  {
+    "page": 21,
+    "title": "18 \u00b7 Video detail / Description",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 1
+  },
+  {
+    "page": 22,
+    "title": "18V \u00b7 Video detail / Description \u00b7 phone viewport",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 2
+  },
+  {
+    "page": 23,
+    "title": "19 \u00b7 Video technical details expanded",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 3
+  },
+  {
+    "page": 24,
+    "title": "20 \u00b7 Video comments and replies",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 4
+  },
+  {
+    "page": 25,
+    "title": "21 \u00b7 Similar videos",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 5
+  },
+  {
+    "page": 26,
+    "title": "22 \u00b7 Add to playlist sheet",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 6
+  },
+  {
+    "page": 27,
+    "title": "23 \u00b7 Add to playlist empty",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 7
+  },
+  {
+    "page": 28,
+    "title": "24 \u00b7 Native fullscreen playback",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 8
+  },
+  {
+    "page": 29,
+    "title": "25 \u00b7 VLC fullscreen playback",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 9
+  },
+  {
+    "page": 30,
+    "title": "26 \u00b7 Picture in Picture / pinned playback",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 10
+  },
+  {
+    "page": 31,
+    "title": "27 \u00b7 Downloads / ready on device",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 11
+  },
+  {
+    "page": 32,
+    "title": "27V \u00b7 Downloads / ready on device \u00b7 phone viewport",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 12
+  },
+  {
+    "page": 33,
+    "title": "28 \u00b7 Downloads / active transfers",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 13
+  },
+  {
+    "page": 34,
+    "title": "29 \u00b7 Downloads information sheet",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 14
+  },
+  {
+    "page": 35,
+    "title": "30 \u00b7 Offline video detail / playback",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 15
+  },
+  {
+    "page": 36,
+    "title": "31 \u00b7 Queue / pending",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 16
+  },
+  {
+    "page": 37,
+    "title": "31V \u00b7 Queue / pending \u00b7 phone viewport",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 17
+  },
+  {
+    "page": 38,
+    "title": "32 \u00b7 Queue / ignored",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 18
+  },
+  {
+    "page": 39,
+    "title": "33 \u00b7 Queue / running task",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 19
+  },
+  {
+    "page": 40,
+    "title": "34 \u00b7 Queue / add link editing",
+    "pdf": "Fold-design-review-part-2.pdf",
+    "pageInPDF": 20
+  },
+  {
+    "page": 41,
+    "title": "35 \u00b7 Queue item swipe actions",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 1
+  },
+  {
+    "page": 42,
+    "title": "36 \u00b7 Settings / playback preferences",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 2
+  },
+  {
+    "page": 43,
+    "title": "37 \u00b7 Seek interval picker",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 3
+  },
+  {
+    "page": 44,
+    "title": "38 \u00b7 About",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 4
+  },
+  {
+    "page": 45,
+    "title": "39 \u00b7 MobileVLCKit license",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 5
+  },
+  {
+    "page": 46,
+    "title": "40 \u00b7 Fold license",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 6
+  },
+  {
+    "page": 47,
+    "title": "41 \u00b7 Share extension / sending",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 7
+  },
+  {
+    "page": 48,
+    "title": "42 \u00b7 Share extension / success",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 8
+  },
+  {
+    "page": 49,
+    "title": "43 \u00b7 Share extension / errors",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 9
+  },
+  {
+    "page": 50,
+    "title": "44 \u00b7 Delete server video confirmation",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 10
+  },
+  {
+    "page": 51,
+    "title": "45 \u00b7 Delete selected videos confirmation",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 11
+  },
+  {
+    "page": 52,
+    "title": "46 \u00b7 Delete queue item confirmation",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 12
+  },
+  {
+    "page": 53,
+    "title": "47 \u00b7 Delete playlist detail confirmation",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 13
+  },
+  {
+    "page": 54,
+    "title": "48 \u00b7 Delete playlist from list confirmation",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 14
+  },
+  {
+    "page": 55,
+    "title": "49 \u00b7 Remove local copy confirmation",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 15
+  },
+  {
+    "page": 56,
+    "title": "50 \u00b7 Sign out confirmation",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 16
+  },
+  {
+    "page": 57,
+    "title": "51 \u00b7 Connection state board",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 17
+  },
+  {
+    "page": 58,
+    "title": "52 \u00b7 Library state board",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 18
+  },
+  {
+    "page": 59,
+    "title": "53 \u00b7 Search state board",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 19
+  },
+  {
+    "page": 60,
+    "title": "54 \u00b7 Channel state board",
+    "pdf": "Fold-design-review-part-3.pdf",
+    "pageInPDF": 20
+  },
+  {
+    "page": 61,
+    "title": "55 \u00b7 Playlist states board",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 1
+  },
+  {
+    "page": 62,
+    "title": "56 \u00b7 Video content states board",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 2
+  },
+  {
+    "page": 63,
+    "title": "57 \u00b7 Downloads empty / filtering / storage",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 3
+  },
+  {
+    "page": 64,
+    "title": "58 \u00b7 Transfer failure / recovery states",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 4
+  },
+  {
+    "page": 65,
+    "title": "59 \u00b7 Queue loading / empty / failures",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 5
+  },
+  {
+    "page": 66,
+    "title": "60 \u00b7 Player overlays / download CTA states",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 6
+  },
+  {
+    "page": 67,
+    "title": "61 \u00b7 iPad Library",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 7
+  },
+  {
+    "page": 68,
+    "title": "62 \u00b7 iPad Video detail",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 8
+  },
+  {
+    "page": 69,
+    "title": "63 \u00b7 iPad Downloads",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 9
+  },
+  {
+    "page": 70,
+    "title": "64 \u00b7 iPad Queue",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 10
+  },
+  {
+    "page": 71,
+    "title": "65 \u00b7 iPad Playlists",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 11
+  },
+  {
+    "page": 72,
+    "title": "66 \u00b7 iPad Settings",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 12
+  },
+  {
+    "page": 73,
+    "title": "67 \u00b7 Light appearance \u00b7 Downloads",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 13
+  },
+  {
+    "page": 74,
+    "title": "68 \u00b7 Light appearance \u00b7 Settings",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 14
+  },
+  {
+    "page": 75,
+    "title": "69 \u00b7 Large text \u00b7 Settings",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 15
+  },
+  {
+    "page": 76,
+    "title": "70 \u00b7 System-owned surfaces",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 16
+  },
+  {
+    "page": 77,
+    "title": "71 \u00b7 Search entry compatibility",
+    "pdf": "Fold-design-review-part-4.pdf",
+    "pageInPDF": 17
+  }
+]
