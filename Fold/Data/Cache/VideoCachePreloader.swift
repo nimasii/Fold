@@ -277,6 +277,12 @@ actor VideoCachePreloader {
         store.clear()
     }
 
+    func removeDeletedVideo(_ videoId: String, authorization: RequestAuthorization) {
+        guard authorization.isActive else { return }
+        cancelPreload(videoId: videoId)
+        if store.currentVideoId() == videoId { store.clear() }
+    }
+
     // MARK: - Reseed
 
     /// Cancel the current preload, reset the `.main` region to a fresh empty

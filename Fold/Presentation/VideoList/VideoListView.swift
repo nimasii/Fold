@@ -125,7 +125,7 @@ struct VideoListView: View {
                 Task { await viewModel.batchDelete() }
             }
             Button(String(localized: "cancel"), role: .cancel) {}
-        }
+        } message: { Text(String(localized: "library_delete_local_help")) }
     }
 
     private var playlistsEntry: some View {

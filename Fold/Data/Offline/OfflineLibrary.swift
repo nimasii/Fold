@@ -172,17 +172,30 @@ final class OfflineLibrary {
         records[i].failure = status == .needsSignIn ? .signIn : nil
         persist()
     }
-    func remove(_ id: UUID) {
-        guard let record = records.first(where: { $0.id == id }), let disk else { return }
+    @discardableResult func remove(_ id: UUID) -> Bool {
+        guard let record = records.first(where: { $0.id == id }) else { return true }
+        guard let disk else { storageError = OfflineFailure.storage.message; return false }
         cancel(id)
         artworkBackfills[id]?.cancel(); artworkBackfills[id] = nil; backfillAttempts[id] = nil
         artworkRetryDates[id] = nil; metadataReadDates[id] = nil
         artworkTasks[id]?.cancel(); artworkTasks[id] = nil; artworkAttempts[id] = nil
         do {
             try disk.remove(record)
-            records.removeAll { $0.id == id }
-            persist()
-        } catch { storageError = OfflineFailure.storage.message }
+            let remaining = records.filter { $0.id != id }
+            try disk.save(remaining)
+            records = remaining
+            storageError = nil
+            refreshingDetails.remove(id); preparationProgress[id] = nil
+            artworkRevision += 1
+            return true
+        } catch { storageError = OfflineFailure.storage.message; return false }
+    }
+
+    /// Account scope includes the installation base path. Unowned legacy copies
+    /// cannot safely be attributed to whichever account happens to be logged in.
+    func removeCopies(for identity: PlaybackIdentity) -> Bool {
+        let ids = records.filter { $0.videoID == identity.videoID && $0.account == identity.account }.map(\.id)
+        return ids.reduce(true) { success, id in remove(id) && success }
     }
     func savePosition(_ id: UUID, seconds: Double) {
         guard seconds.isFinite, let i = records.firstIndex(where: { $0.id == id }) else { return }

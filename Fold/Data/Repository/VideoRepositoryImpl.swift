@@ -69,6 +69,7 @@ final class VideoRepositoryImpl: VideoRepositoryProtocol {
     }
 
     func deleteVideo(id: String) async throws {
+        if let history { try await history.deleteVideo(id: id); return }
         try await apiClient.requestVoid(endpoint: .deleteVideo(id: id))
     }
 

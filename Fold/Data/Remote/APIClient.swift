@@ -61,11 +61,21 @@ final class APIClient {
         _ = try await rawRequest(endpoint: endpoint, body: body, baseURL: baseURL, expectedAuthorizationID: expectedAuthorizationID)
     }
 
+    /// A successful DELETE response still confirms deletion on its captured
+    /// connection if the UI switched accounts while it was in flight. Only
+    /// deletion cleanup may use this result; ordinary reads/auth handling retain
+    /// their current-connection checks.
+    func confirmVideoDeletion(id: String, authorizationID: UUID) async throws {
+        _ = try await rawRequest(endpoint: .deleteVideo(id: id), expectedAuthorizationID: authorizationID,
+                                 finishesCapturedDeletion: true)
+    }
+
     private func rawRequest(
         endpoint: APIEndpoint,
         body: (any Encodable)? = nil,
         baseURL: URL? = nil,
-        expectedAuthorizationID: UUID? = nil
+        expectedAuthorizationID: UUID? = nil,
+        finishesCapturedDeletion: Bool = false
     ) async throws -> Data {
         if let expectedAuthorizationID, authState.authorization?.id != expectedAuthorizationID { throw CancellationError() }
         let base = baseURL ?? authState.baseURL
@@ -99,6 +109,10 @@ final class APIClient {
             try checkCurrentConnection(authorization)
             if (error as? URLError)?.code == .cancelled { throw CancellationError() }
             throw AppError.network(underlying: error)
+        }
+        if finishesCapturedDeletion, case .deleteVideo = endpoint,
+           let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode), http.mimeType != "text/html" {
+            return data
         }
         try checkCurrentConnection(authorization)
 

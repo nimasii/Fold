@@ -60,6 +60,7 @@ extension DataLayerSuite {
         defer { MockResponse.tearDown() }
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
         let auth = try state(); let (coordinator, _, _) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let account = try #require(auth.playbackAccount)
         let identity = PlaybackIdentity(account: account, videoID: "video")
         let session = try #require(coordinator.session(for: identity))
@@ -69,6 +70,7 @@ extension DataLayerSuite {
         try await Task.sleep(for: .milliseconds(500))
         #expect(coordinator.history?.pendingWrites(for: account).count == 1)
         let restored = make(root, auth: auth).0
+        defer { restored.shutdown() }
         #expect(restored.history?.bookmark(for: identity)?.position == 2)
         var methods: [String] = []
         MockURLProtocol.requestHandler = { request in
@@ -87,6 +89,7 @@ extension DataLayerSuite {
         defer { MockResponse.tearDown() }
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
         let auth = try state(); let (coordinator, _, _) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let identity = PlaybackIdentity(account: auth.playbackAccount!, videoID: "video")
         try coordinator.setWatched(false, videoID: "video", duration: 300)
         let session = try #require(coordinator.session(for: identity))
@@ -106,6 +109,7 @@ extension DataLayerSuite {
         defer { MockResponse.tearDown() }
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
         let auth = try state(); let (coordinator, _, _) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let identity = PlaybackIdentity(account: auth.playbackAccount!, videoID: "video")
         var denied = 0
         MockURLProtocol.requestHandler = { request in
@@ -127,6 +131,7 @@ extension DataLayerSuite {
         defer { MockResponse.tearDown() }
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
         let auth = try state(); let (coordinator, _, _) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let identity = PlaybackIdentity(account: auth.playbackAccount!, videoID: "video")
         let session = try #require(coordinator.session(for: identity))
         #expect(coordinator.record(70, duration: 300, session: session, ordinal: 1))
@@ -152,6 +157,7 @@ extension DataLayerSuite {
         try FileManager.default.copyItem(at: fixture, to: store.file(for: record)!)
         try store.save([record])
         let (coordinator, library, api) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let identity = PlaybackIdentity(account: auth.playbackAccount!, videoID: "video")
         let session = try #require(coordinator.session(for: identity))
         MockResponse.setUpError(URLError(.notConnectedToInternet))
@@ -176,6 +182,7 @@ extension DataLayerSuite {
         record.status = .canceled; record.position = 123
         try store.save([record])
         let (coordinator, library, _) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         #expect(coordinator.identity(for: record) == nil)
         #expect(coordinator.display(record).position == 123)
         #expect(coordinator.history?.bookmarks.isEmpty == true)
@@ -190,10 +197,11 @@ extension DataLayerSuite {
         defer { MockResponse.tearDown() }
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
         let auth = try state(); let (coordinator, _, _) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let old = PlaybackIdentity(account: auth.playbackAccount!, videoID: "old-video")
         var oldStarted = false
         MockURLProtocol.delayedHandler = { request in
-            oldStarted = true
+            if request.url?.path == "/api/video/old-video/progress" { oldStarted = true }
             return (MockResponse.httpResponse(url: request.url!.absoluteString), Data(), 1)
         }
         #expect(coordinator.record(40, duration: 300, session: coordinator.session(for: old)!, ordinal: 1))
@@ -222,6 +230,7 @@ extension DataLayerSuite {
         let original = try state(keychain: keychain)
         let restored = AuthState(keychainService: keychain)
         let (coordinator, _, _) = make(root, auth: restored)
+        defer { coordinator.shutdown() }
         let identity = PlaybackIdentity(account: original.playbackAccount!, videoID: "video")
         var actions: [String] = []
         MockURLProtocol.requestHandler = { request in
@@ -251,6 +260,7 @@ extension DataLayerSuite {
         }
         try disk.save(records)
         let (coordinator, _, api) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         try FileManager.default.removeItem(at: disk.file(for: records[0])!)
         try Data(repeating: 0, count: bytes.count).write(to: disk.file(for: records[1])!)
         try bytes.prefix(16).write(to: disk.file(for: records[2])!)
@@ -315,6 +325,7 @@ extension DataLayerSuite {
         _ = try state(keychain: keychain)
         let auth = AuthState(keychainService: keychain)
         let (coordinator, _, api) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let old = PlaybackIdentity(account: auth.playbackAccount!, videoID: "video")
         try coordinator.history?.recordPosition(50, duration: 300, session: coordinator.session(for: old)!, ordinal: 1)
         var paths: [String] = []
@@ -346,6 +357,7 @@ extension DataLayerSuite {
         try bytes.write(to: disk.file(for: record)!)
         try disk.save([record])
         let (coordinator, library, api) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         var paths: [String] = []
         MockURLProtocol.requestHandler = { request in
             paths.append(request.url!.path)
@@ -373,6 +385,7 @@ extension DataLayerSuite {
         let bytes = try Data(contentsOf: fixture); record.bytes = Int64(bytes.count)
         try bytes.write(to: disk.file(for: record)!); try disk.save([record])
         let (coordinator, _, api) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let repository = VideoRepositoryImpl(apiClient: api, authState: auth, history: coordinator)
         MockResponse.setUpError(URLError(.notConnectedToInternet))
         let offline = try await repository.getVideos(page: 1, sort: "", order: "", watch: nil, channel: nil, vidType: nil)
@@ -397,6 +410,7 @@ extension DataLayerSuite {
     @Test func ownedOfflineWatchedActionRemainsScopedWhenSignedOut() throws {
         let root = directory(); defer { try? FileManager.default.removeItem(at: root) }
         let auth = try state(); let (coordinator, _, _) = make(root, auth: auth)
+        defer { coordinator.shutdown() }
         let identity = PlaybackIdentity(account: auth.playbackAccount!, videoID: "video")
         auth.handleUnauthorized()
         try coordinator.setWatched(true, identity: identity, duration: 300)

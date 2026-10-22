@@ -4,6 +4,65 @@ import UIKit
 /// Shipping navigation/repositories/player against a loopback fixture. Only the
 /// fixture namespace is reset; the owner's library and credentials are untouched.
 final class UnifiedHistoryUITests: XCTestCase {
+    @MainActor func testLibraryDeleteConfirmationAndLocalCopyFollowServerOutcome() async throws {
+        continueAfterFailure = false
+        for serverFails in [true, false] {
+            try await mode(offline: false, reset: true, codec: "h264", deleteError: serverFails)
+            let app = XCUIApplication(bundleIdentifier: "com.jacobcampbell.ta-client")
+            app.launchArguments = ["--history-playback-fixture", "--history-fixture-reset", "-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+            XCUIDevice.shared.orientation = .portrait
+            app.launch()
+            XCTAssertTrue(app.buttons["library.playlists"].waitForExistence(timeout: 12)); app.swipeUp()
+            let card = app.buttons["video.card.HISTORY0001"].firstMatch
+            XCTAssertTrue(card.waitForExistence(timeout: 10)); card.tap()
+            XCTAssertTrue(app.buttons["Download to iPhone"].waitForExistence(timeout: 8)); app.buttons["Download to iPhone"].tap()
+            XCTAssertTrue(app.buttons["View Download"].waitForExistence(timeout: 30))
+            app.buttons["video.actions"].tap(); app.buttons["Delete video"].tap()
+            let disclosure = app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Linked downloads on this device")).firstMatch
+            XCTAssertTrue(disclosure.waitForExistence(timeout: 5))
+            capture("library-delete-disclosure-" + String(serverFails))
+            if app.buttons["Cancel"].exists { app.buttons["Cancel"].tap() }
+            else {
+                // iOS 26's native confirmation popover cancels through its
+                // exposed dismiss region rather than rendering a Cancel row.
+                let dismiss = app.otherElements["PopoverDismissRegion"]
+                XCTAssertTrue(dismiss.waitForExistence(timeout: 5))
+                dismiss.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.95)).tap()
+            }
+            XCTAssertTrue(app.buttons["View Download"].exists)
+            let canceled = try await counts(); XCTAssertEqual(canceled["videoDeletes"], 0)
+            app.navigationBars.buttons.element(boundBy: 0).tap()
+            XCTAssertTrue(card.waitForExistence(timeout: 8)); card.tap()
+            XCTAssertTrue(app.staticTexts["Playing the copy on this device"].waitForExistence(timeout: 8))
+            app.buttons["video.play-action"].tap()
+            try await pauseNativePlayer(app) // Quiesce AVKit before opening a native glass menu.
+            app.buttons["video.actions"].tap(); app.buttons["Delete video"].tap()
+            app.buttons["Delete"].firstMatch.tap()
+            if serverFails {
+                XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "Synthetic deletion failed")).firstMatch.waitForExistence(timeout: 12))
+                app.navigationBars.buttons.element(boundBy: 0).tap()
+            } else {
+                XCTAssertTrue(app.buttons["library.playlists"].waitForExistence(timeout: 12))
+                let state = try await counts(); XCTAssertEqual(state["videoDeletes"], 1)
+            }
+            app.tabBars.buttons["Downloads"].tap()
+            let local = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "video.card.")).firstMatch
+            if serverFails { XCTAssertTrue(local.waitForExistence(timeout: 8)) }
+            else { XCTAssertTrue(app.staticTexts["No Downloads Yet"].waitForExistence(timeout: 8)); XCTAssertFalse(local.exists) }
+            capture("library-delete-downloads-" + String(serverFails))
+            app.terminate()
+            try await mode(offline: true)
+            app.launchArguments.removeAll { $0 == "--history-fixture-reset" }
+            app.launch()
+            XCTAssertTrue(app.tabBars.buttons["Downloads"].waitForExistence(timeout: 12)); app.tabBars.buttons["Downloads"].tap()
+            if serverFails { XCTAssertTrue(local.waitForExistence(timeout: 8)) }
+            else { XCTAssertTrue(app.staticTexts["No Downloads Yet"].waitForExistence(timeout: 8)); XCTAssertFalse(local.exists) }
+            capture("library-delete-offline-relaunch-" + String(serverFails))
+            app.terminate()
+        }
+        try await mode(offline: false)
+    }
+
     @MainActor func testLargeTypeLibraryAndOfflineDownloadHistory() async throws {
         continueAfterFailure = false
         try await mode(offline: false, reset: true, codec: "h264")
@@ -295,10 +354,11 @@ final class UnifiedHistoryUITests: XCTestCase {
     @MainActor private func capture(_ name: String) {
         let shot = XCTAttachment(screenshot: XCUIScreen.main.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }
-    private func mode(offline: Bool, reset: Bool = false, codec: String? = nil) async throws {
+    private func mode(offline: Bool, reset: Bool = false, codec: String? = nil, deleteError: Bool? = nil) async throws {
         var request = URLRequest(url: URL(string: "http://127.0.0.1:18086/fixture-mode")!)
         var payload: [String: Any] = ["offline": offline, "reset": reset]
         if let codec { payload["codec"] = codec }
+        if let deleteError { payload["deleteError"] = deleteError }
         request.httpMethod = "POST"; request.httpBody = try JSONSerialization.data(withJSONObject: payload)
         _ = try await URLSession.shared.data(for: request)
     }

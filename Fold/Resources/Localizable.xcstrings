@@ -1,6 +1,54 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "library_delete_cleanup_pending": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "The video was deleted from the server, but local cleanup could not finish. It will retry when you return to the app. You can also remove the copy in Downloads."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Видео удалено с сервера, но локальная очистка не завершена. Она повторится при возвращении в приложение. Копию также можно удалить в разделе загрузок."
+        }
+      }
+    }
+  },
+  "library_video_deleted": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "This video was deleted from the archive."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Это видео удалено из архива."
+        }
+      }
+    }
+  },
+  "library_delete_local_help": {
+    "localizations": {
+      "en": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Linked downloads on this device and their saved playback positions will also be removed after each server deletion succeeds. Unlinked device-only copies are kept."
+        }
+      },
+      "ru": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "После успешного удаления каждого видео с сервера связанные загрузки на этом устройстве и их сохранённые позиции просмотра также будут удалены. Несвязанные локальные копии сохранятся."
+        }
+      }
+    }
+  },
     "history_sync_pending" : {
       "localizations": {
         "en": {
@@ -2437,13 +2485,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Are you sure you want to delete this video from the archive?"
+            "value" : "Delete this video from the archive? Linked downloads on this device and their saved playback position will also be removed after the server confirms deletion. Unlinked device-only copies are kept."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Вы уверены, что хотите удалить это видео из архива?"
+            "value" : "Удалить это видео из архива? После подтверждения сервером связанные загрузки на этом устройстве и их сохранённая позиция просмотра также будут удалены. Несвязанные локальные копии сохранятся."
           }
         }
       }

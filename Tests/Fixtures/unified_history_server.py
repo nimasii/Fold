@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 
 lock = Lock()
-state = {"offline": False, "position": 0, "watched": False, "mediaRequests": 0, "progressPosts": 0, "progressDeletes": 0}
+state = {"offline": False, "position": 0, "watched": False, "mediaRequests": 0, "progressPosts": 0, "progressDeletes": 0, "deleted": False, "deleteError": False, "videoDeletes": 0}
 # Long enough for deterministic pause/seek/relaunch UI work. Generated only in
 # the fixture's temporary directory; no extra binary is committed to the app.
 fixture_directory = tempfile.TemporaryDirectory(prefix="fold-unified-history-")
@@ -60,9 +60,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send(206, data[start:end+1], headers)
             return self.send(200, data, headers)
         if path == "/api/ping": return self.json(200, {"response": "pong", "user": 7})
-        if path == "/api/user/account": return self.json(200, {"id": 7, "name": "Synthetic account"})
-        if path == "/api/video/HISTORY0001": return self.json(200, self.video())
-        if path == "/api/video": return self.json(200, {"data": [self.video()], "paginate": {"current_page": 1, "last_page": 1, "total_hits": 1}})
+        if path == "/api/user/account": return self.json(200, {"id": 7, "name": "Synthetic account", "is_superuser": True, "is_staff": True})
+        if path == "/api/video/HISTORY0001": return self.json(404, {}) if state["deleted"] else self.json(200, self.video())
+        if path == "/api/video": return self.json(200, {"data": [] if state["deleted"] else [self.video()], "paginate": {"current_page": 1, "last_page": 1, "total_hits": 0 if state["deleted"] else 1}})
         if path in ("/api/notification", "/api/video/HISTORY0001/comment", "/api/video/HISTORY0001/similar"): return self.json(200, [])
         if path == "/api/playlist": return self.json(200, {"data": []})
         return self.json(404, {"detail": "Synthetic endpoint unavailable"})
@@ -72,8 +72,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/fixture-mode":
             with lock:
                 if data.get("reset"):
-                    state.update(position=0, watched=False, mediaRequests=0, progressPosts=0, progressDeletes=0)
+                    state.update(position=0, watched=False, mediaRequests=0, progressPosts=0, progressDeletes=0, deleted=False, deleteError=False, videoDeletes=0)
                 state["offline"] = bool(data.get("offline", False))
+                if "deleteError" in data: state["deleteError"] = bool(data["deleteError"])
                 if "codec" in data: state["codec"] = "vp9" if data["codec"] == "vp9" else "h264"
             return self.json(200, {})
         if not self.ready(): return
@@ -89,6 +90,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.json(404, {})
     def do_DELETE(self):
         if not self.ready(): return
+        if urlparse(self.path).path.rstrip("/") == "/api/video/HISTORY0001":
+            if state["deleteError"]: return self.json(500, {"detail": "Synthetic deletion failed"})
+            with lock: state.update(deleted=True, videoDeletes=state["videoDeletes"]+1, position=0)
+            return self.send(204)
         if urlparse(self.path).path.rstrip("/") == "/api/video/HISTORY0001/progress":
             with lock: state.update(position=0, progressDeletes=state["progressDeletes"]+1)
             return self.send(204)

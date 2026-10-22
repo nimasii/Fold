@@ -8,6 +8,14 @@ nonisolated struct PlaybackReadContext {
     let refresh: PlaybackRefresh
 }
 
+protocol LibraryDeletionObserver: AnyObject {
+    @MainActor func libraryVideoDeleted(_ identity: PlaybackIdentity)
+}
+private final class WeakLibraryDeletionObserver {
+    weak var value: (any LibraryDeletionObserver)?
+    init(_ value: any LibraryDeletionObserver) { self.value = value }
+}
+
 @Observable
 final class PlaybackCoordinator {
     let history: PlaybackHistoryStore?
@@ -21,6 +29,10 @@ final class PlaybackCoordinator {
     @ObservationIgnored private var verification: (id: UUID, generation: UUID, task: Task<PlaybackAccount, Error>)?
     @ObservationIgnored private var syncGeneration = UUID()
     @ObservationIgnored private var monitor: NWPathMonitor?
+    @ObservationIgnored private var deleting: Set<PlaybackIdentity> = []
+    @ObservationIgnored private var pendingCleanup: Set<PlaybackIdentity> = []
+    @ObservationIgnored private var cleanupErrorShown = false
+    @ObservationIgnored private var deletionObservers: [WeakLibraryDeletionObserver] = []
 
     init(auth: AuthState, api: APIClient, library: OfflineLibrary, root: URL? = nil, monitorNetwork: Bool = true) {
         self.auth = auth; self.api = api; self.library = library
@@ -34,6 +46,7 @@ final class PlaybackCoordinator {
             }
             monitor.start(queue: DispatchQueue(label: "Fold.PlaybackConnectivity"))
         }
+        reconcileDeletedCopies()
     }
     deinit { monitor?.cancel(); syncTask?.cancel(); verification?.task.cancel() }
 
@@ -90,6 +103,9 @@ final class PlaybackCoordinator {
         // cannot be attributed to the cached offline owner.
         guard auth.accountConfirmed else { return video }
         let identity = PlaybackIdentity(account: context.refresh.account, videoID: video.youtubeId)
+        guard !pendingCleanup.contains(identity), !history.rejectsRead(identity, refresh: context.refresh) else {
+            throw AppError.serverError(statusCode: 404, message: String(localized: "library_video_deleted"))
+        }
         do {
             try history.observeRemote(identity: identity, position: video.position, duration: Double(video.duration),
                                       watched: video.watched, refresh: context.refresh)
@@ -99,6 +115,11 @@ final class PlaybackCoordinator {
     }
 
     func project(_ video: Video) -> Video {
+        if let identity = video.playbackIdentity,
+           pendingCleanup.contains(identity) || history?.deletions[identity] != nil {
+            var deleted = video; deleted.position = 0; deleted.progress = 0; deleted.watched = false
+            return deleted
+        }
         guard let identity = video.playbackIdentity, let history,
               let bookmark = history.bookmark(for: identity) else { return video }
         // A stale view retained after switching accounts cannot expose its history.
@@ -136,6 +157,7 @@ final class PlaybackCoordinator {
 
     @discardableResult
     func record(_ seconds: Double, duration: Double, session: PlaybackSession, ordinal: UInt64, ended: Bool = false) -> Bool {
+        guard !pendingCleanup.contains(session.identity) else { return false }
         guard let history else { errorMessage = String(localized: "history_storage_error"); return false }
         guard auth.playbackAccount == nil || auth.playbackAccount == session.identity.account else { return false }
         do {
@@ -153,6 +175,7 @@ final class PlaybackCoordinator {
     }
 
     func setWatched(_ watched: Bool, identity: PlaybackIdentity, duration: Double) throws {
+        guard !pendingCleanup.contains(identity) else { throw PlaybackHistoryFailure.staleSession }
         guard auth.playbackAccount == nil || auth.playbackAccount == identity.account, let history else { throw PlaybackHistoryFailure.storage }
         try history.setWatched(watched, identity: identity, duration: duration)
         requestSync()
@@ -165,6 +188,10 @@ final class PlaybackCoordinator {
             do { _ = try await prepareRead() } catch { return nil }
         }
         let account = auth.playbackAccount
+        if let account {
+            let identity = PlaybackIdentity(account: account, videoID: videoID)
+            if pendingCleanup.contains(identity) || history?.deletions[identity] != nil { return nil }
+        }
         guard let record = library.records.first(where: {
             if let recordID { return $0.id == recordID && ($0.account == nil || account == nil || $0.account == account) }
             guard $0.videoID == videoID else { return false }
@@ -211,7 +238,9 @@ final class PlaybackCoordinator {
             candidates.append(project(video))
         }
         return candidates.filter {
-            PlaybackCompletion.resumePosition(position: $0.position, duration: Double($0.duration), watched: $0.watched) > 0
+            if let identity = $0.playbackIdentity,
+               pendingCleanup.contains(identity) || history?.deletions[identity] != nil { return false }
+            return PlaybackCompletion.resumePosition(position: $0.position, duration: Double($0.duration), watched: $0.watched) > 0
         }.sorted {
             let a = $0.playbackIdentity.flatMap { history?.bookmark(for: $0)?.revision } ?? 0
             let b = $1.playbackIdentity.flatMap { history?.bookmark(for: $0)?.revision } ?? 0
@@ -235,6 +264,7 @@ final class PlaybackCoordinator {
     }
 
     func requestSync(force: Bool = false) {
+        reconcileDeletedCopies()
         guard force || Date() >= nextSyncAttempt else { return }
         guard syncTask == nil, let account = auth.playbackAccount,
               let authorization = auth.authorization, let history,
@@ -259,7 +289,9 @@ final class PlaybackCoordinator {
             var writes = 0
             while writes < 32, !Task.isCancelled, authorization.id == self.auth.authorization?.id,
                   account == self.auth.playbackAccount, self.auth.accountConfirmed {
-                guard let sent = history.pendingWrites(for: account).first(where: { !attempted.contains($0.identity) }) else { break }
+                guard let sent = history.pendingWrites(for: account).first(where: {
+                    !attempted.contains($0.identity) && !self.deleting.contains($0.identity) && !self.pendingCleanup.contains($0.identity)
+                }) else { break }
                 writes += 1
                 do {
                     try await self.send(sent, authorizationID: authorization.id)
@@ -282,7 +314,8 @@ final class PlaybackCoordinator {
         func check() throws {
             try Task.checkCancellation()
             guard auth.authorization?.id == authorizationID, auth.playbackAccount == sent.identity.account,
-                  auth.accountConfirmed else { throw CancellationError() }
+                  auth.accountConfirmed, !deleting.contains(sent.identity), !pendingCleanup.contains(sent.identity),
+                  history?.deletions[sent.identity] == nil else { throw CancellationError() }
         }
         try check()
         if sent.needsWatchedWrite {
@@ -296,6 +329,55 @@ final class PlaybackCoordinator {
         if sent.position > 5 {
             try await api.requestVoid(endpoint: .videoProgress(id: sent.identity.videoID), body: VideoProgressDTO(position: sent.position), expectedAuthorizationID: authorizationID)
         }
+    }
+
+    func registerDeletionObserver(_ observer: any LibraryDeletionObserver) {
+        deletionObservers.removeAll { $0.value == nil }
+        deletionObservers.append(WeakLibraryDeletionObserver(observer))
+    }
+
+    var deletionConnectionID: UUID? { auth.authorization?.id }
+
+    /// Delete on the captured connection first. Failure/cancellation leaves local
+    /// media and history intact. A confirmed response always finishes cleanup for
+    /// that captured account, even if the user switched accounts while waiting.
+    func deleteVideo(id: String) async throws {
+        guard history != nil else { throw PlaybackHistoryFailure.storage }
+        let connection = auth.authorization?.id
+        let account = try await confirmAccount()
+        guard let authorization = auth.authorization, authorization.id == connection, auth.playbackAccount == account else { throw CancellationError() }
+        let identity = PlaybackIdentity(account: account, videoID: id)
+        guard !deleting.contains(identity) else { throw CancellationError() }
+        deleting.insert(identity)
+        defer { deleting.remove(identity); requestSync() }
+        // Stop any old progress drain before DELETE, retaining its durable outbox
+        // if deletion fails. A late acknowledgement cannot resurrect the journal.
+        syncTask?.cancel(); syncTask = nil; syncGeneration = UUID()
+        try await api.confirmVideoDeletion(id: id, authorizationID: authorization.id)
+        syncTask?.cancel(); syncTask = nil; syncGeneration = UUID()
+        pendingCleanup.insert(identity)
+        reconcileDeletedCopies()
+        // Existing cache is a playback optimization, never the durable download.
+        await VideoCachePreloader.shared.removeDeletedVideo(id, authorization: authorization)
+        guard auth.authorization?.id == authorization.id else { throw CancellationError() }
+    }
+
+    private func reconcileDeletedCopies() {
+        guard let history else { return }
+        let targets = Set(history.deletions.keys).union(pendingCleanup).filter { identity in
+            pendingCleanup.contains(identity) || library.records.contains { $0.account == identity.account && $0.videoID == identity.videoID }
+        }
+        for identity in targets {
+            pendingCleanup.insert(identity)
+            deletionObservers.removeAll { $0.value == nil }
+            for observer in deletionObservers { observer.value?.libraryVideoDeleted(identity) }
+            do {
+                try history.markDeleted(identity)
+                guard library.removeCopies(for: identity) else { throw PlaybackHistoryFailure.storage }
+                pendingCleanup.remove(identity)
+            } catch { cleanupErrorShown = true; errorMessage = String(localized: "library_delete_cleanup_pending") }
+        }
+        if pendingCleanup.isEmpty, cleanupErrorShown { cleanupErrorShown = false; errorMessage = nil }
     }
 }
 

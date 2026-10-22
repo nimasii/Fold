@@ -217,10 +217,12 @@ final class VideoListViewModel {
     }
 
     func batchDelete() async {
+        let connection = playbackCoordinator?.deletionConnectionID
         let ids = Array(selectedVideoIds)
         cancelSelection()
 
         for videoId in ids {
+            guard playbackCoordinator?.deletionConnectionID == connection else { return }
             do {
                 try await videoRepository.deleteVideo(id: videoId)
                 videos.removeAll { $0.youtubeId == videoId }

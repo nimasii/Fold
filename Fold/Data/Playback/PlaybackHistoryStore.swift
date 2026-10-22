@@ -37,6 +37,7 @@ nonisolated struct PlaybackRefresh: Sendable {
 @Observable
 final class PlaybackHistoryStore {
     private(set) var bookmarks: [PlaybackIdentity: PlaybackBookmark]
+    private(set) var deletions: [PlaybackIdentity: UInt64] = [:]
     private(set) var storageFailure: PlaybackHistoryFailure?
     @ObservationIgnored private var readOrder: UInt64 = 0
     @ObservationIgnored private var acceptedReadOrders: [PlaybackIdentity: UInt64] = [:]
@@ -48,7 +49,9 @@ final class PlaybackHistoryStore {
         let version: Int
         let revision: UInt64
         let bookmarks: [PlaybackBookmark]
+        var deletions: [Deletion]? = nil
     }
+    private struct Deletion: Codable { let identity: PlaybackIdentity; let revision: UInt64 }
 
     init(root: URL) throws {
         let files = FileManager.default
@@ -80,6 +83,14 @@ final class PlaybackHistoryStore {
                 loaded[bookmark.identity] = bookmark
             }
             bookmarks = loaded; revision = archive.revision
+            for deletion in archive.deletions ?? [] {
+                guard !deletion.identity.videoID.isEmpty, deletion.identity.account.userID > 0,
+                      let url = URL(string: deletion.identity.account.server),
+                      PlaybackAccount(baseURL: url, userID: deletion.identity.account.userID) == deletion.identity.account,
+                      deletion.revision > 0, deletion.revision <= archive.revision,
+                      loaded[deletion.identity] == nil, deletions[deletion.identity] == nil else { throw PlaybackHistoryFailure.invalidData }
+                deletions[deletion.identity] = deletion.revision
+            }
         } else { bookmarks = [:]; revision = 0 }
     }
 
@@ -111,6 +122,7 @@ final class PlaybackHistoryStore {
         guard let active = sessions[session.identity], active.id == session.id, ordinal > active.ordinal else {
             throw PlaybackHistoryFailure.staleSession
         }
+        guard deletions[session.identity] == nil else { throw PlaybackHistoryFailure.staleSession }
         guard seconds.isFinite, seconds >= 0, duration.isFinite, duration >= 0 else { throw PlaybackHistoryFailure.invalidPosition }
         let previous = bookmarks[session.identity]
         let total = duration > 0 ? duration : (previous?.duration ?? 0)
@@ -131,6 +143,7 @@ final class PlaybackHistoryStore {
 
     @discardableResult
     func setWatched(_ watched: Bool, identity: PlaybackIdentity, duration: Double, at date: Date = .now) throws -> PlaybackBookmark {
+        guard deletions[identity] == nil else { throw PlaybackHistoryFailure.staleSession }
         guard duration.isFinite, duration >= 0 else { throw PlaybackHistoryFailure.invalidPosition }
         let total = duration > 0 ? duration : (bookmarks[identity]?.duration ?? 0)
         let bookmark = PlaybackBookmark(identity: identity, position: watched ? total : 0, duration: total,
@@ -151,6 +164,7 @@ final class PlaybackHistoryStore {
     /// is acknowledged AND observed back from the server. Never use max(position).
     func observeRemote(identity: PlaybackIdentity, position: Double, duration: Double, watched: Bool,
                        refresh: PlaybackRefresh) throws {
+        guard !rejectsRead(identity, refresh: refresh) else { throw PlaybackHistoryFailure.staleSession }
         guard identity.account == refresh.account, position.isFinite, position >= 0, duration.isFinite, duration >= 0 else {
             throw PlaybackHistoryFailure.invalidData
         }
@@ -184,6 +198,22 @@ final class PlaybackHistoryStore {
         bookmarks.values.filter { $0.identity.account == account && $0.pendingSync }.sorted { $0.revision < $1.revision }
     }
 
+    func rejectsRead(_ identity: PlaybackIdentity, refresh: PlaybackRefresh) -> Bool {
+        deletions[identity].map { refresh.revision < $0 } ?? false
+    }
+
+    /// Persist deletion before removing bytes. This also serves as a recovery
+    /// marker for interrupted/failed local cleanup on the next launch.
+    func markDeleted(_ identity: PlaybackIdentity) throws {
+        guard !identity.videoID.isEmpty else { throw PlaybackHistoryFailure.invalidData }
+        sessions[identity] = nil
+        if deletions[identity] != nil { return }
+        var updated = bookmarks; updated[identity] = nil
+        var removed = deletions; let next = try nextRevision(); removed[identity] = next
+        try persist(updated, deletions: removed, revision: next)
+        acceptedReadOrders[identity] = nil
+    }
+
     /// A response for revision N never acknowledges revision N+1, even if that
     /// newer action rewound to a smaller position or reset it to zero.
     @discardableResult
@@ -208,15 +238,21 @@ final class PlaybackHistoryStore {
         var updated = bookmarks
         updated[bookmark.identity] = bookmark
         let next = max(revision, bookmark.revision)
+        var removed = deletions; removed[bookmark.identity] = nil
+        try persist(updated, deletions: removed, revision: next)
+    }
+
+    private func persist(_ updated: [PlaybackIdentity: PlaybackBookmark], deletions removed: [PlaybackIdentity: UInt64], revision next: UInt64) throws {
         do {
             // Refuse a symlink that appeared after initialization too.
             // Foundation URLs cache resource values. Recreate the URL so a
             // repaired file can retry and a newly introduced link is rechecked.
             let destination = URL(fileURLWithPath: file.path)
             if (try? destination.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true { throw PlaybackHistoryFailure.storage }
-            let archive = Archive(version: 1, revision: next, bookmarks: updated.values.sorted { $0.revision < $1.revision })
+            let archive = Archive(version: 1, revision: next, bookmarks: updated.values.sorted { $0.revision < $1.revision },
+                deletions: removed.map { Deletion(identity: $0.key, revision: $0.value) })
             try JSONEncoder().encode(archive).write(to: destination, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
-            bookmarks = updated; revision = next; storageFailure = nil
+            bookmarks = updated; deletions = removed; revision = next; storageFailure = nil
         } catch {
             storageFailure = .storage
             throw PlaybackHistoryFailure.storage

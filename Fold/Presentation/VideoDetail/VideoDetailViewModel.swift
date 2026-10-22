@@ -5,7 +5,7 @@ import OSLog
 private nonisolated let logger = Logger(subsystem: "ru.mzhukov.TAClient", category: "VideoDetail")
 
 @Observable
-final class VideoDetailViewModel {
+final class VideoDetailViewModel: LibraryDeletionObserver {
     let videoId: String
     private var storedVideo: Video?
     var video: Video? {
@@ -16,6 +16,7 @@ final class VideoDetailViewModel {
     private var playbackSession: PlaybackSession?
     private var progressOrdinal: UInt64 = 0
     private var hasPlayed = false
+    private var wasDeleted = false
     private var usesDurableProgress: Bool { playbackSession != nil || isLocalPlayback }
     private var reachedEnd = false
     private var bypassLocalSource = false
@@ -314,6 +315,7 @@ final class VideoDetailViewModel {
         }
         self.router = router
         self.sponsorBlockSettings = sponsorBlockSettings
+        playbackCoordinator?.registerDeletionObserver(self)
     }
 
     /// Safety net for abnormal teardown paths (e.g. VM released without
@@ -394,7 +396,7 @@ final class VideoDetailViewModel {
     }
 
     func startPlayback() {
-        guard !isPlaying && !isBuffering, let video else { return }
+        guard !wasDeleted, !isPlaying && !isBuffering, let video else { return }
 
         if let identity = video.playbackIdentity, playbackCoordinator != nil {
             guard authState.playbackAccount == nil || authState.playbackAccount == identity.account else { return }
@@ -2019,6 +2021,7 @@ final class VideoDetailViewModel {
 
     @discardableResult
     private func persistSharedProgress(_ seconds: Double, ended: Bool = false) -> Bool {
+        guard !wasDeleted else { return false }
         guard let video, seconds.isFinite, seconds >= 0 else { return false }
         let actual = player?.currentItem?.duration.seconds ?? 0
         let duration = actual.isFinite && actual > 0 ? actual : Double(video.duration)
@@ -2033,6 +2036,7 @@ final class VideoDetailViewModel {
     }
 
     func persistCurrentProgress() {
+        guard !wasDeleted else { return }
         if let time = player?.currentTime().seconds, time.isFinite { nativePlaybackPosition = time }
         guard usesDurableProgress, hasPlayed, !reachedEnd else { return }
         if let player {
@@ -2065,6 +2069,7 @@ final class VideoDetailViewModel {
     }
 
     func loadVideo() async {
+        guard !wasDeleted else { return }
         isLoading = true
         errorMessage = nil
 
@@ -2072,6 +2077,7 @@ final class VideoDetailViewModel {
             guard playbackAuthorizationID == authState.authorization?.id || (localPlayback != nil && authState.authorization == nil) else { throw CancellationError() }
             if let playbackCoordinator, !bypassLocalSource,
                let source = await playbackCoordinator.localSource(videoID: videoId, recordID: localPlayback?.record.id) {
+                guard !wasDeleted else { isLoading = false; return }
                 localPlayback = source
                 var snapshot = source.record.libraryVideo
                 snapshot.playbackIdentity = playbackCoordinator.identity(for: source.record)
@@ -2090,7 +2096,9 @@ final class VideoDetailViewModel {
                 }
             } else {
                 if playbackCoordinator != nil { localPlayback = nil }
-                video = try await videoRepository.getVideo(id: videoId)
+                let loaded = try await videoRepository.getVideo(id: videoId)
+                guard !wasDeleted else { isLoading = false; return }
+                video = loaded
                 // Legacy bytes can be reused after matching server metadata, while
                 // its unowned device bookmark stays separate until explicit adoption.
                 if let playbackCoordinator, !bypassLocalSource, let video,
@@ -2103,6 +2111,7 @@ final class VideoDetailViewModel {
         }
 
         // Start preloading for AVPlayer videos
+        guard !wasDeleted else { isLoading = false; return }
         if !isLocalPlayback, let video,
            playbackEngine(for: video) == .avPlayer,
            let url = URL(string: video.mediaUrl),
@@ -2120,19 +2129,25 @@ final class VideoDetailViewModel {
     }
 
     func loadComments() async {
+        guard !wasDeleted else { return }
         guard !isPrivatePlayback else { return }
         isLoadingComments = true
         do {
-            comments = try await videoRepository.getComments(videoId: videoId)
+            let loaded = try await videoRepository.getComments(videoId: videoId)
+            guard !wasDeleted else { isLoadingComments = false; return }
+            comments = loaded
         } catch {}
         isLoadingComments = false
     }
 
     func loadSimilarVideos() async {
+        guard !wasDeleted else { return }
         guard similarVideos.isEmpty else { return }
         isLoadingSimilar = true
         do {
-            similarVideos = try await videoRepository.getSimilarVideos(videoId: videoId)
+            let loaded = try await videoRepository.getSimilarVideos(videoId: videoId)
+            guard !wasDeleted else { isLoadingSimilar = false; return }
+            similarVideos = loaded
         } catch {}
         isLoadingSimilar = false
     }
@@ -2142,6 +2157,7 @@ final class VideoDetailViewModel {
     /// so its older debounce observer can retry a failed network save.
     @discardableResult
     func saveProgress(position: Double) async -> Bool {
+        guard !wasDeleted else { return false }
         if usesDurableProgress { return persistSharedProgress(position) }
         do {
             try await videoRepository.updateProgress(videoId: videoId, position: position)
@@ -2172,10 +2188,11 @@ final class VideoDetailViewModel {
     }
 
     func deleteVideo() async {
+        guard playbackAuthorizationID == authState.authorization?.id else { return }
         do {
             try await videoRepository.deleteVideo(id: videoId)
             stopPlayback()
-            await VideoCachePreloader.shared.clear()
+            if playbackCoordinator == nil { await VideoCachePreloader.shared.clear() }
             router.markVideoDeleted(videoId)
             router.goBack()
         } catch {
@@ -2184,16 +2201,34 @@ final class VideoDetailViewModel {
     }
 
     func deleteAndIgnoreVideo() async {
+        let connection = authState.authorization?.id
+        guard playbackAuthorizationID == connection else { return }
         do {
             try await videoRepository.deleteVideo(id: videoId)
-            try await videoRepository.ignoreVideo(id: videoId)
             stopPlayback()
-            await VideoCachePreloader.shared.clear()
+            if playbackCoordinator == nil { await VideoCachePreloader.shared.clear() }
             router.markVideoDeleted(videoId)
+            // Deletion already succeeded even if the separate ignore request
+            // fails. Keep both Library and Downloads consistent with that fact.
+            do {
+                guard connection == authState.authorization?.id else { throw CancellationError() }
+                try await videoRepository.ignoreVideo(id: videoId)
+            }
+            catch { router.handleError(error, errorMessage: &errorMessage); return }
             router.goBack()
         } catch {
             router.handleError(error, errorMessage: &errorMessage)
         }
+    }
+
+    func libraryVideoDeleted(_ identity: PlaybackIdentity) {
+        guard video?.playbackIdentity == identity || playbackSession?.identity == identity,
+              !wasDeleted else { return }
+        wasDeleted = true // Set before stop: its final callbacks cannot re-create history.
+        stopPlayback()
+        playbackSession = nil; localPlayback = nil; video = nil
+        comments = []; similarVideos = []; isLoading = false
+        errorMessage = String(localized: "library_video_deleted")
     }
 
     func navigateToChannel(_ channelId: String) {
