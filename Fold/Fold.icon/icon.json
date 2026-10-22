@@ -11,8 +11,8 @@
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
-              -12,
-              23.092447988018193
+              28,
+              17.092447988018193
             ]
           }
         },
@@ -22,8 +22,8 @@
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
-              -12,
-              23.092447988018193
+              28,
+              17.092447988018193
             ]
           }
         },
@@ -33,8 +33,8 @@
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
-              -12,
-              23.092447988018193
+              28,
+              17.092447988018193
             ]
           }
         },
@@ -44,13 +44,13 @@
           "position" : {
             "scale" : 1,
             "translation-in-points" : [
-              -12,
-              23.092447988018193
+              28,
+              17.092447988018193
             ]
           }
         }
       ],
-      "name" : "Folded play ribbon",
+      "name" : "Folded play ribbon — rounded preview",
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
