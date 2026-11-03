@@ -285,7 +285,7 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
         do {
             let (_, response) = try await networkSession.data(for: request)
-            if handleUnauthorizedIfNeeded(response: response) { return nil }
+            if await handleUnauthorizedIfNeeded(response: response) { return nil }
             guard let http = response as? HTTPURLResponse else { return nil }
             // Only populate content-info on a successful response with a
             // known content length. A 302 / 404 / 500, or a 2xx missing
@@ -553,7 +553,7 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
         do {
             let (data, response) = try await networkSession.data(for: request)
-            if handleUnauthorizedIfNeeded(response: response) { return .failed }
+            if await handleUnauthorizedIfNeeded(response: response) { return .failed }
             guard let http = response as? HTTPURLResponse else {
                 logger.error("Network fetch failed: non-HTTP response")
                 return .failed
@@ -610,23 +610,15 @@ final class CachingResourceLoader: NSObject, AVAssetResourceLoaderDelegate {
 
     // MARK: - Helpers
 
-    /// Detects HTTP 401/403 responses and posts `.taAuthUnauthorized` so
-    /// `AppRouter` can drop the user back to the login screen. Returns `true`
-    /// when the response indicated an auth failure (the caller should bail
-    /// out). Centralised so both `fillContentInfo` and `fetchFromNetwork`
-    /// share one detection path, and so unit tests can exercise the
-    /// dispatch logic directly without an `AVAssetResourceLoadingRequest`.
-    nonisolated func handleUnauthorizedIfNeeded(response: URLResponse?) -> Bool {
+    /// Reject unusable media; verify the scoped connection before reporting expiry.
+    nonisolated func handleUnauthorizedIfNeeded(response: URLResponse?) async -> Bool {
         guard let http = response as? HTTPURLResponse else { return false }
-        if RequestAuthorization.isAuthenticationFailure(http) {
-            logger.error("Unauthorized for \(self.videoId): \(http.statusCode)")
-            // Post with `videoId` as `object` so tests can scope observers
-            // to a specific loader instance and avoid cross-test bleed.
-            // AppRouter's observer uses `object: nil` and ignores the value.
-            NotificationCenter.default.post(name: .taAuthUnauthorized, object: self.videoId, userInfo: authorization.map { ["authorizationID": $0.id] })
-            return true
+        if let authorization {
+            return (try? await authorization.rejectsMediaResponse(http, using: networkSession,
+                notificationObject: videoId)) ?? true
         }
-        return false
+        // Legacy unscoped requests cannot prove that the current login expired.
+        return RequestAuthorization.isAuthenticationFailure(http)
     }
 
     /// UTI for `contentInformationRequest.contentType`.

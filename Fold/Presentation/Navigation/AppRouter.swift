@@ -83,9 +83,9 @@ final class AppRouter {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            if let id = notification.userInfo?["authorizationID"] as? UUID,
-               id != self?.authState.authorization?.id { return }
-            self?.handleUnauthorized()
+            guard let self, let id = notification.userInfo?["authorizationID"] as? UUID,
+                  id == self.authState.authorization?.id else { return }
+            self.handleUnauthorized()
         }
     }
 

@@ -51,6 +51,17 @@ struct SessionRestorationTests {
         #expect(state.reloginURL == url.absoluteString)
     }
 
+    @Test func unexpectedPingBodyPreservesSavedConnection() async throws {
+        let (keychain, state, router) = try storedSession()
+        let snapshot = state.authorization
+        let repo = MockAuthRepository()
+        repo.pingHandler = { false }
+        await SessionRestorer.restore(authState: state, repository: repo, router: router)
+        #expect(state.authorization === snapshot && snapshot?.isActive == true)
+        #expect(AuthState(keychainService: keychain).isAuthenticated)
+        #expect(router.appState == .authenticated)
+    }
+
     @Test func staleLaunchFailureCannotSignOutReplacementServer() async throws {
         let (keychain, state, router) = try storedSession()
         let old = state.authorization

@@ -9,6 +9,7 @@ final class OfflineLibrary {
     private(set) var preparationProgress: [UUID: Double] = [:]
     @ObservationIgnored private let preparer = OfflineMediaPreparer()
     @ObservationIgnored private var preparationTasks: [UUID: Task<Void, Never>] = [:]
+    @ObservationIgnored private var authenticationTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private let authState: AuthState
     @ObservationIgnored let disk: OfflineDiskStore?
     @ObservationIgnored private let delegate: OfflineTransferDelegate?
@@ -59,7 +60,7 @@ final class OfflineLibrary {
         session = delegate.map { URLSession(configuration: configuration, delegate: $0, delegateQueue: queue) }
         delegate?.owner = self
     }
-    deinit { artworkBackfills.values.forEach { $0.cancel() }; session?.invalidateAndCancel(); artworkTasks.values.forEach { $0.cancel() }; preparationTasks.values.forEach { $0.cancel() } }
+    deinit { authenticationTasks.values.forEach { $0.cancel() }; artworkBackfills.values.forEach { $0.cancel() }; session?.invalidateAndCancel(); artworkTasks.values.forEach { $0.cancel() }; preparationTasks.values.forEach { $0.cancel() } }
 
     var totalSize: String { ByteCountFormatter.string(fromByteCount: records.filter { $0.status == .ready }.reduce(0) { $0 + $1.bytes }, countStyle: .file) }
     func record(for video: Video) -> OfflineRecord? {
@@ -134,10 +135,8 @@ final class OfflineLibrary {
             records[i].failure = (error as? OfflineFailure) ?? .storage
             records[i].attempt = nil
             persist()
-            if (error as? OfflineFailure) == .signIn, let auth = authState.authorization,
-               RequestAuthorization.origin(auth.baseURL) == records[i].origin {
-                NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil, userInfo: ["authorizationID": auth.id])
-            }
+            // Invalid or unavailable local transfer authorization is not proof
+            // that the server rejected the current connection.
         }
     }
     nonisolated static func request(url: URL, authorization: RequestAuthorization) throws -> URLRequest {
@@ -339,7 +338,26 @@ final class OfflineLibrary {
         guard let response, let url = response.url, RequestAuthorization.origin(url) == records[i].origin else {
             disk.discard(staged); fail(description, failure: .server); return
         }
-        if RequestAuthorization.isAuthenticationFailure(response) { disk.discard(staged); fail(description, failure: .signIn); return }
+        if RequestAuthorization.isAuthenticationFailure(response) {
+            disk.discard(staged)
+            guard let session, authenticationTasks[attempt] == nil else { return }
+            authenticationTasks[attempt] = Task { [weak self] in
+                let rejected: Bool
+                do { rejected = try await auth.isAuthenticationFailure(response, using: session) }
+                catch {
+                    guard !Task.isCancelled, let self, self.index(description) != nil,
+                          auth.isActive, self.authState.authorization?.id == auth.id else { return }
+                    self.authenticationTasks[attempt] = nil
+                    self.fail(description, failure: .network)
+                    return
+                }
+                guard !Task.isCancelled, let self, self.index(description) != nil,
+                      auth.isActive, self.authState.authorization?.id == auth.id else { return }
+                self.authenticationTasks[attempt] = nil
+                self.fail(description, failure: rejected ? .signIn : .server, confirmedUnauthorized: rejected)
+            }
+            return
+        }
         guard response.statusCode == 200 else { disk.discard(staged); fail(description, failure: .server); return }
         let output: URL
         do {
@@ -388,20 +406,21 @@ final class OfflineLibrary {
             }
         }
     }
-    func fail(_ description: String?, failure: OfflineFailure) {
+    func fail(_ description: String?, failure: OfflineFailure, confirmedUnauthorized: Bool = false) {
         guard let i = index(description) else { return }
         let auth = records[i].attempt.flatMap { authorizations[$0] }
         release(records[i].attempt, cancel: true)
         records[i].status = failure == .signIn ? .needsSignIn : .failed
         records[i].failure = failure; records[i].attempt = nil; records[i].bytes = 0
         persist()
-        if failure == .signIn, let auth, auth.id == authState.authorization?.id {
+        if confirmedUnauthorized, !Task.isCancelled, let auth, auth.isActive, auth.id == authState.authorization?.id {
             NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil, userInfo: ["authorizationID": auth.id])
         }
     }
     private func release(_ attempt: UUID?, cancel: Bool = false) {
         guard let attempt else { return }
-        if cancel { tasks[attempt]?.cancel(); preparationTasks[attempt]?.cancel() }
+        if cancel { tasks[attempt]?.cancel(); preparationTasks[attempt]?.cancel(); authenticationTasks[attempt]?.cancel() }
+        authenticationTasks[attempt] = nil
         tasks[attempt] = nil; authorizations[attempt] = nil
     }
     @discardableResult private func persist() -> Bool {

@@ -12,7 +12,8 @@ enum SessionRestorer {
         do {
             let valid = try await repository.ping()
             guard isCurrent() else { return }
-            guard valid else { router.onAutoLoginFailed(); return }
+            // An unexpected successful ping body is not an authentication rejection.
+            guard valid else { router.onAutoLoginUnavailable(); return }
             do { try await repository.fetchUserAccount() }
             catch {
                 guard isCurrent() else { return }

@@ -11,10 +11,10 @@ If a server cannot supply a usable application session, **Use an existing API to
 ## Transport and storage
 
 - API calls, thumbnails, lock-screen artwork, cache HEAD/range requests, VLC/AirPlay's local proxy and the share extension use the same scoped authorization implementation. Native URLSession cookie jars are disabled. Cookies are filtered by exact host, path, Secure flag and expiry, then attached only to the configured origin, including its port. Tokens have the same origin boundary. Range headers are preserved.
-- Session mutations carry `X-CSRFToken`, Origin and Referer. Native redirects are stopped before forwarding any credential. 401, 403, redirects or HTML sign-in responses require a new sign-in. As in the previous client, a 403 permission rejection also requires sign-in.
+- Session mutations carry `X-CSRFToken`, Origin and Referer. Native redirects are stopped before forwarding any credential. Resource 401/403, redirects and HTML responses stop the affected operation. The same connection is checked with authenticated ping before saved credentials are removed; permission failures and unavailable verification preserve the connection. A confirmed authentication rejection requires normal sign-in.
 - New connection records contain the origin and either cookies or an explicitly supplied existing token together in a single Keychain entry. Keychain updates preserve the prior entry if an update fails. Cookies are device-only and available after first unlock. Failed candidate validation does not replace a working connection. Session cookies are never widened to sibling hosts or other ports in native requests.
 - Existing token/server keys remain readable and do not automatically become session connections. The keychain service/account names remain unchanged. The app and share extension now derive their access group from the fork's existing entitlements instead of the original author's hardcoded team. Credentials belonging to another signing team/access group remain inaccessible and require normal sign-in; the app does not request broader entitlements.
-- Logout/unauthorized responses revoke retained authorization snapshots, clear saved credentials, and discard media/image caches through the router. An expired session retains its non-secret server address in memory for relogin. Browser state is ephemeral and removed when the sheet closes. Logout is local to TAClient; it does not reset API tokens or sign other Umbrel clients out.
+- Logout/confirmed unauthorized responses revoke retained authorization snapshots, clear saved credentials, and discard media/image caches through the router. An expired session retains its non-secret server address in memory for relogin. Browser state is ephemeral and removed when the sheet closes. Logout is local to TAClient; it does not reset API tokens or sign other Umbrel clients out.
 
 ## Verification
 
@@ -43,3 +43,5 @@ Sources checked October 15, 2026:
 - [Standard Umbrel package](https://github.com/getumbrel/umbrel-apps/blob/master/tubearchivist/docker-compose.yml)
 
 These upstream sources establish supported behavior; the owner's private deployment settings were not read or changed.
+
+See [persistent sign-in during media failures](testing/media-session-persistence.md) for current verification behavior and server-owned expiry limits.

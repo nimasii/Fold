@@ -393,6 +393,9 @@ extension DataLayerSuite {
         for status in [403, 401] {
             MockURLProtocol.requestHandler = { request in
                 if request.url!.path == "/api/ping" {
+                    if status == 401 {
+                        return (MockResponse.httpResponse(url: request.url!.absoluteString, statusCode: 401), Data())
+                    }
                     return (MockResponse.httpResponse(url: request.url!.absoluteString), MockResponse.json(["response": "pong", "user": 7]))
                 }
                 return (MockResponse.httpResponse(url: request.url!.absoluteString, statusCode: status), Data())

@@ -952,6 +952,13 @@ extension DataLayerSuite {
             mainStartByte: prefixSize,
             prefixStatus: 401
         )
+        let mediaHandler = MockURLProtocol.requestHandler!
+        MockURLProtocol.requestHandler = { request in
+            if request.url?.path.contains("api/ping") == true {
+                return (HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!, Data())
+            }
+            return try mediaHandler(request)
+        }
         defer {
             VideoCachePreloader.testSessionConfigurationOverride = nil
             MockResponse.tearDown()
@@ -969,6 +976,7 @@ extension DataLayerSuite {
             videoId: videoId,
             url: URL(string: "https://ta.example.com/media/\(videoId).mp4")!,
             token: "test-token",
+            authorization: RequestAuthorization(baseURL: URL(string: "https://ta.example.com")!, token: "test-token"),
             startPosition: 0,
             duration: 0,
             maxRetries: 0
@@ -1893,9 +1901,12 @@ extension DataLayerSuite {
             maxRetries: 0
         )
         let store = VideoCachePreloader.shared.store
-        _ = await Self.pollUntil(timeoutSeconds: 5) {
-            store.regionStatus(videoId: videoId, region: .main) != nil
+        // Empty-cache cleanup after cancellation is independent of reseeding.
+        // Seed bytes first so that cleanup cannot race the offset comparison.
+        let seeded = await Self.pollUntil(timeoutSeconds: 5) {
+            store.regionStatus(videoId: videoId, region: .main) != nil && store.cachedByteCount(videoId: videoId) > 0
         }
+        #expect(seeded, "fixture must seed bytes before testing orphan reseed")
 
         // Simulate what stopPlayback does: cancelPreload the active task.
         // This nils preloadTask but does NOT clear the store entry — the

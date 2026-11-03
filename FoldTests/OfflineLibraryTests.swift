@@ -8,7 +8,12 @@ private final class OfflineFixtureBundle: NSObject {}
 private final class OfflineHoldProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func startLoading() {} // No network is performed; tests deliver completion explicitly.
+    override func startLoading() {
+        // Only expiry verification is delivered here; media completions remain explicit.
+        guard request.url?.path.contains("api/ping") == true else { return }
+        client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocolDidFinishLoading(self)
+    }
     override func stopLoading() {}
 }
 
@@ -149,6 +154,8 @@ extension DataLayerSuite {
         let pending = try #require(library.records.first)
         let file = try staged(library)
         library.finish(description(pending), response: response(0, code: 401, mime: "application/json"), staged: file)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while library.records.first?.status == .downloading && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
         #expect(library.records.first?.status == .needsSignIn)
         #expect(!state.isAuthenticated && router.appState == .login)
         #expect(library.localURL(for: saved) != nil)

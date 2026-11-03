@@ -145,6 +145,7 @@ actor AuthProxy {
     private let token: String
     private let authorization: RequestAuthorization?
     private let serverBaseURL: URL
+    private let sessionConfiguration: URLSessionConfiguration
     private let pathSecret = UUID().uuidString
     /// "The published listener was torn down." `stop()` sets it so a late `.failed`
     /// callback from the listener being cancelled cannot resurrect the proxy through
@@ -194,10 +195,12 @@ actor AuthProxy {
 
     var localPort: UInt16 { port }
 
-    init(token: String, serverBaseURL: URL, authorization: RequestAuthorization? = nil) {
+    init(token: String, serverBaseURL: URL, authorization: RequestAuthorization? = nil,
+         sessionConfiguration: URLSessionConfiguration = .ephemeral) {
         self.token = token
         self.authorization = authorization
         self.serverBaseURL = serverBaseURL
+        self.sessionConfiguration = sessionConfiguration.copy() as! URLSessionConfiguration
     }
 
     func start() async throws {
@@ -546,7 +549,7 @@ actor AuthProxy {
         let streamer = StreamingSession()
         defer { streamer.cancelUpstream() }
         do {
-            let config = URLSessionConfiguration.default
+            let config = sessionConfiguration.copy() as! URLSessionConfiguration
             config.httpCookieStorage = nil
             config.urlCache = nil
             config.timeoutIntervalForRequest = 0
@@ -555,7 +558,12 @@ actor AuthProxy {
             let (httpResponse, chunks) = try await streamer.stream(request: request, configuration: config)
 
             if RequestAuthorization.isAuthenticationFailure(httpResponse) {
-                NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil, userInfo: authorization.map { ["authorizationID": $0.id] })
+                streamer.cancelUpstream()
+                if let authorization {
+                    let probeSession = URLSession(configuration: config, delegate: RejectRedirects(), delegateQueue: nil)
+                    defer { probeSession.invalidateAndCancel() }
+                    _ = try? await authorization.rejectsMediaResponse(httpResponse, using: probeSession)
+                }
                 connection.cancel()
                 return
             }

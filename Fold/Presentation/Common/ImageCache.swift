@@ -93,8 +93,10 @@ actor ImageCache {
         } else { authenticationFailed = RequestAuthorization.isAuthenticationFailure(httpResponse) }
         guard !Task.isCancelled, authorization?.isActive != false else { return nil }
         if authenticationFailed {
-            NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil,
-                userInfo: authorization.map { ["authorizationID": $0.id] })
+            if let authorization {
+                NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil,
+                    userInfo: ["authorizationID": authorization.id])
+            }
             return nil
         }
         guard (200...299).contains(httpResponse.statusCode) else { return nil }
