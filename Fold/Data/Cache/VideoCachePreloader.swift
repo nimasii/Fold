@@ -691,10 +691,9 @@ actor VideoCachePreloader {
         }
 
         if RequestAuthorization.isAuthenticationFailure(http) {
-            logger.error("Preload HEAD unauthorized for \(videoId): \(http.statusCode)")
-            // Post with `videoId` as `object` so tests can scope
-            // observers by sender and avoid cross-test bleed.
-            NotificationCenter.default.post(name: .taAuthUnauthorized, object: videoId, userInfo: authorization.map { ["authorizationID": $0.id] })
+            if let authorization {
+                _ = try? await authorization.rejectsMediaResponse(http, using: headSession, notificationObject: videoId)
+            }
             return nil
         }
         guard (200...299).contains(http.statusCode) else {
@@ -757,8 +756,12 @@ actor VideoCachePreloader {
         let (httpResponse, chunks) = try await streamer.stream(request: request, configuration: config)
 
         if RequestAuthorization.isAuthenticationFailure(httpResponse) {
-            logger.error("Preload (\(region.name)) unauthorized for \(videoId): \(httpResponse.statusCode)")
-            NotificationCenter.default.post(name: .taAuthUnauthorized, object: videoId, userInfo: authorization.map { ["authorizationID": $0.id] })
+            streamer.cancelUpstream()
+            if let authorization {
+                let probeSession = URLSession(configuration: config, delegate: RejectRedirects(), delegateQueue: nil)
+                defer { probeSession.invalidateAndCancel() }
+                _ = try? await authorization.rejectsMediaResponse(httpResponse, using: probeSession, notificationObject: videoId)
+            }
             return
         }
 

@@ -11,9 +11,10 @@ final class SessionPersistenceUITests: XCTestCase {
         app.launch()
         let server = app.textFields.firstMatch
         XCTAssertTrue(server.waitForExistence(timeout: 10))
-        server.tap(); server.typeText("http://127.0.0.1:18079")
-        if app.buttons["Done"].firstMatch.isHittable { app.buttons["Done"].firstMatch.tap() }
-        app.buttons["connection.sign-in"].tap()
+        // Submit through the field's normal Go action. Tapping underneath the
+        // floating keyboard toolbar can hit a moving control on newer iOS.
+        server.tap(); server.typeText("http://127.0.0.1:18079\n")
+        XCTAssertTrue(app.buttons["Finish"].waitForExistence(timeout: 10))
         let link = app.webViews.links["Sign in to fixture"]
         XCTAssertTrue(link.waitForExistence(timeout: 10)); link.tap()
         XCTAssertTrue(app.webViews.staticTexts.containing(NSPredicate(format: "label BEGINSWITH %@", "Signed in to the fixture server")).firstMatch.waitForExistence(timeout: 10))

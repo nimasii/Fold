@@ -4,7 +4,7 @@ import Foundation
 
 /// Tests for B3 (Task 3): the preloader (`VideoCachePreloader`) and
 /// `CachingResourceLoader` must dispatch a `.taAuthUnauthorized` notification
-/// when the Data-layer request receives 401/403. `AppRouter` subscribes to
+/// when the server confirms that the scoped connection expired. `AppRouter` subscribes to
 /// this and drops the user back to the login screen.
 extension DataLayerSuite {
 @Suite(.serialized) struct CacheAuthFailureTests {
@@ -12,6 +12,10 @@ extension DataLayerSuite {
     init() {
         MockResponse.tearDown()
         VideoCachePreloader.testSessionConfigurationOverride = nil
+    }
+
+    private func authorization() -> RequestAuthorization {
+        RequestAuthorization(baseURL: URL(string: "https://ta.example.com")!, token: "test-token")
     }
 
     // MARK: - VideoCachePreloader
@@ -39,6 +43,7 @@ extension DataLayerSuite {
             videoId: "vid-401-preload",
             url: URL(string: "https://ta.example.com/media/vid-401.mp4")!,
             token: "test-token",
+            authorization: authorization(),
             startPosition: 0,
             duration: 0,
             maxRetries: 0
@@ -63,6 +68,9 @@ extension DataLayerSuite {
         nonisolated(unsafe) var headCount = 0
         nonisolated(unsafe) var getCount = 0
         MockURLProtocol.requestHandler = { request in
+            if request.url?.path.contains("api/ping") == true {
+                return (HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!, Data())
+            }
             if request.httpMethod == "HEAD" {
                 headCount += 1
                 let response = HTTPURLResponse(
@@ -94,6 +102,7 @@ extension DataLayerSuite {
             videoId: videoId,
             url: url,
             token: "test-token",
+            authorization: authorization(),
             // Both > 0 so downloadVideo enters the HEAD-probe branch.
             startPosition: 15,
             duration: 60,
@@ -129,6 +138,7 @@ extension DataLayerSuite {
             videoId: "vid-403-preload",
             url: URL(string: "https://ta.example.com/media/vid-403.mp4")!,
             token: "test-token",
+            authorization: authorization(),
             startPosition: 0,
             duration: 0,
             maxRetries: 0
@@ -141,6 +151,8 @@ extension DataLayerSuite {
     // MARK: - CachingResourceLoader
 
     @Test func cachingResourceLoader_on401_postsUnauthorizedNotification() async {
+        MockResponse.setUp(statusCode: 401, data: Data())
+        defer { MockResponse.tearDown() }
         // CachingResourceLoader accepts a sessionConfiguration for the network
         // session so we inject a mock configuration directly. The 401/403
         // detection path is centralised in `handleUnauthorizedIfNeeded`, which
@@ -149,7 +161,9 @@ extension DataLayerSuite {
         let loader = CachingResourceLoader(
             videoId: "vid-401-loader",
             originalURL: URL(string: "https://ta.example.com/media/vid-401-loader.mp4")!,
-            token: "test-token"
+            token: "test-token",
+            authorization: authorization(),
+            sessionConfiguration: MockResponse.makeConfiguration()
         )
 
         let expectation = NotificationExpectation(
@@ -163,7 +177,7 @@ extension DataLayerSuite {
             httpVersion: nil,
             headerFields: nil
         )!
-        let wasUnauthorized = loader.handleUnauthorizedIfNeeded(response: http401)
+        let wasUnauthorized = await loader.handleUnauthorizedIfNeeded(response: http401)
         #expect(wasUnauthorized, "handleUnauthorizedIfNeeded should detect 401 as unauthorized")
 
         let fired = await expectation.wait(timeoutSeconds: 2)
@@ -171,10 +185,14 @@ extension DataLayerSuite {
     }
 
     @Test func cachingResourceLoader_on403_postsUnauthorizedNotification() async {
+        MockResponse.setUp(statusCode: 403, data: Data())
+        defer { MockResponse.tearDown() }
         let loader = CachingResourceLoader(
             videoId: "vid-403-loader",
             originalURL: URL(string: "https://ta.example.com/media/vid-403-loader.mp4")!,
-            token: "test-token"
+            token: "test-token",
+            authorization: authorization(),
+            sessionConfiguration: MockResponse.makeConfiguration()
         )
 
         let expectation = NotificationExpectation(
@@ -188,7 +206,7 @@ extension DataLayerSuite {
             httpVersion: nil,
             headerFields: nil
         )!
-        let wasUnauthorized = loader.handleUnauthorizedIfNeeded(response: http403)
+        let wasUnauthorized = await loader.handleUnauthorizedIfNeeded(response: http403)
         #expect(wasUnauthorized, "handleUnauthorizedIfNeeded should detect 403 as unauthorized")
 
         let fired = await expectation.wait(timeoutSeconds: 2)
@@ -199,7 +217,9 @@ extension DataLayerSuite {
         let loader = CachingResourceLoader(
             videoId: "vid-ok-loader",
             originalURL: URL(string: "https://ta.example.com/media/vid-ok-loader.mp4")!,
-            token: "test-token"
+            token: "test-token",
+            authorization: authorization(),
+            sessionConfiguration: MockResponse.makeConfiguration()
         )
 
         // Scope the observer by senderId (this loader's videoId) so any
@@ -217,7 +237,7 @@ extension DataLayerSuite {
             httpVersion: nil,
             headerFields: nil
         )!
-        let wasUnauthorized = loader.handleUnauthorizedIfNeeded(response: http200)
+        let wasUnauthorized = await loader.handleUnauthorizedIfNeeded(response: http200)
         #expect(!wasUnauthorized, "handleUnauthorizedIfNeeded should not treat 200 as unauthorized")
 
         // Give any stray posts a moment to arrive.
@@ -235,7 +255,7 @@ extension DataLayerSuite {
         let router = AppRouter(authState: authState)
         #expect(router.appState != .login)
 
-        NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil)
+        NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil, userInfo: ["authorizationID": authState.authorization!.id])
 
         // Give the main-queue notification a tick to drain.
         for _ in 0..<50 {
@@ -253,8 +273,9 @@ extension DataLayerSuite {
         let router = AppRouter(authState: authState)
 
         // Rapid-fire multiple posts — must only transition once, no crashes.
+        let authorizationID = authState.authorization!.id
         for _ in 0..<5 {
-            NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil)
+            NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil, userInfo: ["authorizationID": authorizationID])
         }
 
         for _ in 0..<50 {
@@ -265,10 +286,11 @@ extension DataLayerSuite {
 
         // After onLoginSuccess, the idempotency flag resets so a subsequent
         // 401 after re-login will again transition.
+        authState.setCredentials(token: "replacement", serverURL: "https://ta.example.com")
         router.onLoginSuccess()
         #expect(router.appState == .authenticated)
 
-        NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil)
+        NotificationCenter.default.post(name: .taAuthUnauthorized, object: nil, userInfo: ["authorizationID": authState.authorization!.id])
         for _ in 0..<50 {
             if router.appState == .login { break }
             try? await Task.sleep(for: .milliseconds(10))

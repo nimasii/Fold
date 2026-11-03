@@ -14,7 +14,7 @@ These are controlled reproductions. The user's physical server response, install
 
 ## Behavior after the fix
 
-- HTTP 401 still rejects the current session immediately. Ambiguous 403, redirects and successful HTML responses are confirmed using the read-only authenticated ping with the exact same authorization snapshot and origin. A rejected authenticated ping still requires sign-in; unavailable or malformed verification does not prove expiry.
+- Resource 401/403, redirects and successful HTML responses are confirmed using the read-only authenticated ping with the exact same authorization snapshot and origin. A rejected authenticated ping still requires sign-in; unavailable or malformed verification does not prove expiry.
 - A denied action remains denied. It is never replayed after the probe, and a permission error does not remove saved credentials. Redirects are not followed and HTML is not accepted as an image or a successful API mutation.
 - Revalidation uses a ten-second request timeout. Concurrent denied API/artwork requests share one ping per authorization snapshot. There is no successful-result cache that could hide later expiry. A rejected ping never recursively probes itself.
 - Cancelled or superseded API requests cannot revoke a replacement connection. Optional notification requests still report genuine session expiry. Polling stops for confirmed auth/permission denial and cancellation, while transient failures retain retry behavior.
@@ -37,3 +37,5 @@ The fixture server binds only to `127.0.0.1:18085`, uses synthetic cookies and i
 ## Scope and limits
 
 The approved Liquid Glass layout, centered icon, system player/web ownership, account mode, iOS 17 deployment target, TAClient compatibility scheme and Xcode Cloud workflows are unchanged. Runtime checks use iOS 26.5 Simulator on this Mac; physical-server/device confirmation and TestFlight availability are separate from local fixture results. The prior Apple browser session required authentication, so archive success alone must not be described as TestFlight availability.
+
+Later media transport and persistence coverage is documented in [Persistent sign-in during media failures](media-session-persistence.md).

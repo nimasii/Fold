@@ -87,7 +87,6 @@ nonisolated final class RequestAuthorization: @unchecked Sendable {
         try Task.checkCancellation()
         guard isActive else { throw CancellationError() }
         guard Self.isAuthenticationFailure(response) else { return false }
-        if response.statusCode == 401 { return true }
         let pingURL = baseURL.appendingPathComponent("api/ping/")
         if response.url?.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) ==
             pingURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) { return true }

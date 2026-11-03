@@ -6,7 +6,7 @@ The session fix was developed on `codex/native-player-session-restore`, based on
 
 - Saved cookie sessions and existing tokens continue using the same device-only Keychain service and access group. No lifetime is extended and no token is created.
 - Startup network failures, maintenance, rate limits and server errors preserve the connection and enter the main screen, where retry and private downloads are available. Previously network failure returned to connection setup, and HTML 5xx responses were treated as authentication failures and wiped credentials.
-- HTML login pages returned with a successful status, redirects and 401/403 still require normal sign-in. Explicit logout still revokes snapshots and removes saved credentials.
+- Confirmed rejection of authenticated ping still requires normal sign-in. Resource 401/403, redirects and successful HTML responses are verified before clearing the saved connection; see [media session persistence](media-session-persistence.md). Explicit logout still revokes snapshots and removes saved credentials.
 - Session mutations now serialize HTTP `Origin` like a browser: default ports are omitted. The internal exact-origin comparison still normalizes ports. Previously a normal HTTPS server could receive `Origin: https://host:443` while Django compared against `https://host`, causing a CSRF 403 and sign-out when progress was saved. This is a confirmed source defect; whether it explains Jake's exact deployment still needs normal owner-flow validation.
 - A launch ping/account request from an earlier connection cannot invalidate a replacement connection. Navigating into private downloads also prevents the launch check from replacing navigation.
 

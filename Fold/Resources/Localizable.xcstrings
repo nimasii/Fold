@@ -2917,13 +2917,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "For servers that require a token. Enter your existing Tube Archivist API token; Fold will not create or reset one. Gateway-protected servers should use server sign-in."
+            "value" : "For a longer-lived direct connection, enter an existing Tube Archivist API token. Fold will not create or reset one. Gateway-protected servers should use server sign-in."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Введите существующий API-токен Tube Archivist. Fold не создаёт и не сбрасывает токены. Для серверов со шлюзом используйте вход на сервере."
+            "value" : "Для более длительного прямого подключения введите существующий API-токен Tube Archivist. Fold не создаёт и не сбрасывает токены. Для серверов со шлюзом используйте вход на сервере."
           }
         }
       }
@@ -3189,13 +3189,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Complete the server’s sign-in, then choose Finish to connect."
+            "value" : "Complete the server’s sign-in, selecting Remember me for a longer session, then choose Finish to connect."
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Завершите вход на сервере, затем нажмите «Готово» для подключения."
+            "value" : "Завершите вход на сервере, выбрав «Запомнить меня» для более длительного сеанса, затем нажмите «Готово» для подключения."
           }
         }
       }

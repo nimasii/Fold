@@ -99,7 +99,7 @@ extension DataLayerSuite {
     }
 
     @Test(arguments: ["pending", "ignore", "notifications", "start", "rescan", "kill", "update", "add", "delete"])
-    func genuine401ClearsOnlyCurrentSessionWithoutProbe(_ name: String) async throws {
+    func genuine401ClearsOnlyCurrentSessionAfterVerification(_ name: String) async throws {
         defer { MockResponse.tearDown() }
         let (keychain, state, router, api, _) = try connected()
         let original = state.authorization; let log = QueueRequestLog()
@@ -109,7 +109,8 @@ extension DataLayerSuite {
         #expect(router.appState == .login && !state.isAuthenticated)
         #expect(original?.isActive == false)
         #expect(!AuthState(keychainService: keychain).isAuthenticated)
-        #expect(log.requests.count == 1)
+        #expect(log.requests.count == 2)
+        #expect(log.requests.filter { Self.isPing($0) }.count == 1)
     }
 
     @Test(arguments: [401, 403, 302, 200])

@@ -61,9 +61,10 @@ final class PlaybackCoordinator {
             let ping: PingDTO = try await api.request(endpoint: .ping)
             try Task.checkCancellation()
             guard auth.authorization?.id == authorization.id else { throw CancellationError() }
-            guard ping.response == "pong", let user = ping.user, user > 0 else { throw AppError.unauthorized }
+            guard ping.response == "pong" else { throw AppError.decoding(underlying: nil) }
+            guard let user = ping.user, user > 0 else { throw AppError.unauthorized }
             auth.setVerifiedAccount(user, authorizationID: authorization.id)
-            guard let account = auth.playbackAccount else { throw AppError.unauthorized }
+            guard let account = auth.playbackAccount else { throw AppError.invalidURL }
             return account
         }
         let generation = UUID()
