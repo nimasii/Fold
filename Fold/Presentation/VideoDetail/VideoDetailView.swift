@@ -314,6 +314,10 @@ struct AVPlayerView: UIViewControllerRepresentable {
     }
 
     class Coordinator: NSObject, AVPlayerViewControllerDelegate {
+        let fullscreenOrientation = FullscreenOrientationSession()
+        // AVKit keeps its delegate weak. SwiftUI may rebuild the inline host
+        // during rotation; keep the active delegate until dismissal completes.
+        private var fullscreenRetainer: Coordinator?
         var isFullScreen: Binding<Bool>
         var isPiPActive: Binding<Bool>
         var onPiPStopped: (() -> Void)?
@@ -504,7 +508,19 @@ struct AVPlayerView: UIViewControllerRepresentable {
             let t = playerViewController.player?.currentTime().seconds ?? -1
             let rate = playerViewController.player?.rate ?? 0
             viewLogger.notice("[Fullscreen] willBegin t=\(String(format: "%.2f", t))s rate=\(rate)")
+            fullscreenRetainer = self
+            fullscreenOrientation.capture(in: playerViewController.view.window?.windowScene
+                ?? coordinator.containerView.window?.windowScene)
             isFullScreen.wrappedValue = true
+            coordinator.animate(alongsideTransition: nil) { [self] context in
+                if context.isCancelled {
+                    isFullScreen.wrappedValue = false
+                    fullscreenOrientation.restore()
+                    fullscreenRetainer = nil
+                } else {
+                    fullscreenOrientation.enterLandscape()
+                }
+            }
         }
 
         func playerViewController(
@@ -516,7 +532,10 @@ struct AVPlayerView: UIViewControllerRepresentable {
             let t = playerViewController.player?.currentTime().seconds ?? -1
             let rate = playerViewController.player?.rate ?? 0
             viewLogger.notice("[Fullscreen] willEnd t=\(String(format: "%.2f", t))s rate=\(rate) wasPlaying=\(wasPlaying)")
-            coordinator.animate(alongsideTransition: nil) { [self] _ in
+            coordinator.animate(alongsideTransition: nil) { [self] context in
+                guard !context.isCancelled else { return }
+                fullscreenOrientation.restore()
+                fullscreenRetainer = nil
                 isFullScreen.wrappedValue = false
                 let player = playerViewController.player
                 let item = player?.currentItem

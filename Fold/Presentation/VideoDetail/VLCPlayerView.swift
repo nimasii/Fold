@@ -389,15 +389,18 @@ class VLCPlayerContainerVC: UIViewController {
 
 private class VLCFullScreenVC: UIViewController {
     private weak var containerVC: VLCPlayerContainerVC?
+    private let fullscreenOrientation = FullscreenOrientationSession()
 
     init(containerVC: VLCPlayerContainerVC) {
         self.containerVC = containerVC
         super.init(nibName: nil, bundle: nil)
+        fullscreenOrientation.capture(in: containerVC.view.window?.windowScene)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
+    override var preferredInterfaceOrientationForPresentation: UIInterfaceOrientation { .landscapeRight }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
     override var prefersStatusBarHidden: Bool { true }
 
@@ -406,6 +409,11 @@ private class VLCFullScreenVC: UIViewController {
         view.backgroundColor = .black
         containerVC?.reparentDrawable(to: view)
         reparentControls(to: view)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        fullscreenOrientation.enterLandscape()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -417,6 +425,7 @@ private class VLCFullScreenVC: UIViewController {
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        fullscreenOrientation.restore()
         // Clear after the presenting detail screen has reappeared, matching AVKit.
         containerVC?.setFullScreenState(false)
     }

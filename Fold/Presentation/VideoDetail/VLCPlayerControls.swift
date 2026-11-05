@@ -91,6 +91,7 @@ struct VLCPlayerControls: View {
                         .font(.title2)
                 }
                 .accessibilityLabel(state.isPlaying ? String(localized: "vlc_pause") : String(localized: "vlc_play"))
+                .accessibilityIdentifier("vlc.playpause")
 
                 Spacer()
 
@@ -101,8 +102,11 @@ struct VLCPlayerControls: View {
                 Button(action: onToggleFullScreen) {
                     Image(systemName: "arrow.up.left.and.arrow.down.right")
                         .font(.caption)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .accessibilityLabel(String(localized: "vlc_fullscreen"))
+                .accessibilityIdentifier("vlc.fullscreen")
                 .padding(.leading, 8)
             }
         }
