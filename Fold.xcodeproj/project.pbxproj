@@ -7,9 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DD0000010000000000000001 /* SwiftVLC in Frameworks */ = {isa = PBXBuildFile; platformFilter = maccatalyst; productRef = DD0000020000000000000002 /* SwiftVLC */; };
-		2743D9EB2F4C515900A7114D /* MobileVLCKit in Frameworks */ = {isa = PBXBuildFile; platformFilter = ios; productRef = CC0000022F3FA4BE00000002 /* MobileVLCKit */; };
-		AA000000000000000000000D /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000010000000000000001 /* ShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		2743D9EB2F4C515900A7114D /* MobileVLCKit in Frameworks */ = {isa = PBXBuildFile; productRef = CC0000022F3FA4BE00000002 /* MobileVLCKit */; };
+		AA000000000000000000000D /* ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = AA0000010000000000000001 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
         BB0000000000000000000001 /* RequestAuthorization.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000003; };
         BB0000000000000000000002 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000004; };
 /* End PBXBuildFile section */
@@ -113,7 +112,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				2743D9EB2F4C515900A7114D /* MobileVLCKit in Frameworks */,
-				DD0000010000000000000001 /* SwiftVLC in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -186,7 +184,6 @@
 			name = Fold;
 			packageProductDependencies = (
 				CC0000022F3FA4BE00000002 /* MobileVLCKit */,
-				DD0000020000000000000002 /* SwiftVLC */,
 			);
 			productName = Fold;
 			productReference = 27D79B162F3FA4BE00E87BCA /* Fold.app */;
@@ -297,7 +294,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				CC0000012F3FA4BE00000001 /* XCRemoteSwiftPackageReference "MobileVLCKit-SPM" */,
-				DD0000030000000000000003 /* XCRemoteSwiftPackageReference "SwiftVLC" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 27D79B172F3FA4BE00E87BCA /* Products */;
@@ -389,7 +385,6 @@
 		};
 		AA000000000000000000000C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			platformFilter = ios;
 			target = AA0000060000000000000006 /* ShareExtension */;
 			targetProxy = AA000000000000000000000B /* PBXContainerItemProxy */;
 		};
@@ -522,14 +517,6 @@
 		27D79B3A2F3FA4C100E87BCA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				SUPPORTS_MACCATALYST = YES;
-				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 18.0;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = "com.jacobcampbell.ta-client.mac$(FOLD_MAC_BUNDLE_SUFFIX)";
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Mac/FoldMac.entitlements;
-				"INFOPLIST_FILE[sdk=macosx*]" = Mac/Info.plist;
-				"CODE_SIGN_STYLE[sdk=macosx*]" = Automatic;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				ASSETCATALOG_COMPILER_APPICON_NAME = Fold;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Fold/Fold.entitlements;
@@ -565,14 +552,6 @@
 		27D79B3B2F3FA4C100E87BCA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				SUPPORTS_MACCATALYST = YES;
-				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 18.0;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.jacobcampbell.ta-client;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Mac/FoldMac.entitlements;
-				"INFOPLIST_FILE[sdk=macosx*]" = Mac/Info.plist;
-				"CODE_SIGN_STYLE[sdk=macosx*]" = Automatic;
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
-				"PROVISIONING_PROFILE_SPECIFIER[sdk=macosx*]" = "";
 				ASSETCATALOG_COMPILER_APPICON_NAME = Fold;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Fold/Fold.entitlements;
@@ -610,8 +589,6 @@
 		27D79B3D2F3FA4C100E87BCA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				SUPPORTS_MACCATALYST = YES;
-				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 18.0;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -634,8 +611,6 @@
 		27D79B3E2F3FA4C100E87BCA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				SUPPORTS_MACCATALYST = YES;
-				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 18.0;
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -658,8 +633,6 @@
 		27D79B402F3FA4C100E87BCA /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				SUPPORTS_MACCATALYST = YES;
-				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 18.0;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LUZS336ZHP;
@@ -680,8 +653,6 @@
 		27D79B412F3FA4C100E87BCA /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				SUPPORTS_MACCATALYST = YES;
-				"IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]" = 18.0;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = LUZS336ZHP;
@@ -808,11 +779,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		DD0000030000000000000003 /* XCRemoteSwiftPackageReference "SwiftVLC" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/harflabs/SwiftVLC.git";
-			requirement = {kind = exactVersion; version = 1.0.0; };
-		};
 		CC0000012F3FA4BE00000001 /* XCRemoteSwiftPackageReference "MobileVLCKit-SPM" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/MobileVLCKit-SPM/MobileVLCKit-SPM";
@@ -824,7 +790,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		DD0000020000000000000002 /* SwiftVLC */ = {isa = XCSwiftPackageProductDependency; package = DD0000030000000000000003; productName = SwiftVLC; };
 		CC0000022F3FA4BE00000002 /* MobileVLCKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = CC0000012F3FA4BE00000001 /* XCRemoteSwiftPackageReference "MobileVLCKit-SPM" */;

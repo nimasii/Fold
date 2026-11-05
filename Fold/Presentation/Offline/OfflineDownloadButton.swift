@@ -14,13 +14,13 @@ struct OfflineDownloadButton: View {
                     if record?.status == .ready { router.navigate(to: .offlineDownloads) }
                     else { library.enqueue(video) }
                 } label: {
-                    Label(record?.status == .ready ? String(localized: "offline_downloaded") : OfflineDeviceCopy.downloadAction,
+                    Label(String(localized: record?.status == .ready ? "offline_downloaded" : "offline_download_action"),
                           systemImage: record?.status == .ready ? "checkmark.circle.fill" : "arrow.down.circle")
                 }
                 .labelStyle(CompactDownloadLabelStyle(compact: compact))
                 .foldAction()
                 .disabled(record?.status.isActive == true)
-                .accessibilityLabel(record?.status == .ready ? String(localized: "offline_downloaded") : OfflineDeviceCopy.downloadAction)
+                .accessibilityLabel(String(localized: record?.status == .ready ? "offline_downloaded" : "offline_download_action"))
                 if !compact { Spacer(minLength: 4) }
                 if record?.status.isActive == true {
                     Button(String(localized: "offline_cancel"), systemImage: "stop.circle") {

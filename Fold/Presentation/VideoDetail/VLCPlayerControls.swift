@@ -29,8 +29,8 @@ struct VLCPlayerControls: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onTapToggle() }
 
-            #if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))
-            if FoldDevelopmentArguments.current.contains("--history-playback-fixture") {
+            #if DEBUG && targetEnvironment(simulator)
+            if ProcessInfo.processInfo.arguments.contains("--history-playback-fixture") {
                 VStack(alignment: .leading) {
                     Text(String(format: "%.3f", state.engineTime)).accessibilityIdentifier("fixture.vlc.position")
                     Text(String(format: "%.3f", state.confirmedSeekTarget)).accessibilityIdentifier("fixture.vlc.confirmed-target")

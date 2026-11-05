@@ -28,8 +28,8 @@ final class DependencyContainer {
     let router: AppRouter
 
     private init() {
-        #if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst)) && !UI_REVIEW_PREVIEW
-        if FoldDevelopmentArguments.current.contains("--streaming-fixture") {
+        #if DEBUG && targetEnvironment(simulator) && !UI_REVIEW_PREVIEW
+        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture") {
             keychainService = KeychainService(inMemory: true)
             authState = AuthState(keychainService: keychainService, loadPersistedCredentials: false)
             try? authState.setExistingToken("STREAMING_FIXTURE_TOKEN", serverURL: URL(string: StreamingFixtureRepository.base)!)
@@ -42,14 +42,14 @@ final class DependencyContainer {
             router = AppRouter(authState: authState)
             let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("StreamingDesignFixture-v1", isDirectory: true)
-            if FoldDevelopmentArguments.current.contains("--streaming-fixture-reset") { try? FileManager.default.removeItem(at: root) }
-            if FoldDevelopmentArguments.current.contains("--streaming-fixture-legacy-artwork") || FoldDevelopmentArguments.current.contains("--streaming-fixture-corrupt-artwork"),
+            if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-reset") { try? FileManager.default.removeItem(at: root) }
+            if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-legacy-artwork") || ProcessInfo.processInfo.arguments.contains("--streaming-fixture-corrupt-artwork"),
                let store = try? OfflineDiskStore(root: root), var copies = try? store.load() {
                 for index in copies.indices where copies[index].status == .ready {
-                    if FoldDevelopmentArguments.current.contains("--streaming-fixture-legacy-artwork") { copies[index].metadata = nil }
+                    if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-legacy-artwork") { copies[index].metadata = nil }
                     for kind in ["thumbnail", "channel"] {
                         let file = root.appendingPathComponent("Artwork/" + copies[index].id.uuidString + "-" + kind + ".jpg")
-                        if FoldDevelopmentArguments.current.contains("--streaming-fixture-corrupt-artwork") {
+                        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-corrupt-artwork") {
                             try? Data("corrupt fixture".utf8).write(to: file, options: .atomic)
                         } else { try? FileManager.default.removeItem(at: file) }
                     }
@@ -60,30 +60,30 @@ final class DependencyContainer {
             authState.setVerifiedAccount(1, authorizationID: authState.authorization!.id)
             playbackCoordinator = PlaybackCoordinator(auth: authState, api: apiClient, library: offlineLibrary, root: root.appendingPathComponent("History"))
             router.onLoginSuccess()
-            if FoldDevelopmentArguments.current.contains("--streaming-fixture-downloads") { router.selectedTab = .downloads }
-            if FoldDevelopmentArguments.current.contains("--streaming-fixture-login") { router.appState = .login }
+            if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-downloads") { router.selectedTab = .downloads }
+            if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-login") { router.appState = .login }
             return
         }
         #endif
-        #if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))
-        if FoldDevelopmentArguments.current.contains("--session-persistence-fixture") || FoldDevelopmentArguments.current.contains("--history-playback-fixture") {
+        #if DEBUG && targetEnvironment(simulator)
+        if ProcessInfo.processInfo.arguments.contains("--session-persistence-fixture") || ProcessInfo.processInfo.arguments.contains("--history-playback-fixture") {
             keychainService = KeychainService(persistentFixture: true)
-            if FoldDevelopmentArguments.current.contains("--session-persistence-reset") || FoldDevelopmentArguments.current.contains("--history-fixture-reset") { keychainService.clearAll() }
+            if ProcessInfo.processInfo.arguments.contains("--session-persistence-reset") || ProcessInfo.processInfo.arguments.contains("--history-fixture-reset") { keychainService.clearAll() }
         } else { keychainService = KeychainService() }
         #else
         keychainService = KeychainService()
         #endif
         #if DEBUG
-        let isolated = (FoldDevelopmentArguments.current.contains("--connection-fixture") || FoldDevelopmentArguments.current.contains("--playback-fixture")) || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let isolated = (ProcessInfo.processInfo.arguments.contains("--connection-fixture") || ProcessInfo.processInfo.arguments.contains("--playback-fixture")) || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         authState = AuthState(keychainService: keychainService, loadPersistedCredentials: !isolated)
         #else
         authState = AuthState(keychainService: keychainService)
         #endif
-        #if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))
+        #if DEBUG && targetEnvironment(simulator)
         var historyFixtureRoot: URL?
-        if FoldDevelopmentArguments.current.contains("--history-playback-fixture") {
+        if ProcessInfo.processInfo.arguments.contains("--history-playback-fixture") {
             historyFixtureRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("UnifiedPlaybackHTTPFixture-v1")
-            if FoldDevelopmentArguments.current.contains("--history-fixture-reset"), let historyFixtureRoot { try? FileManager.default.removeItem(at: historyFixtureRoot) }
+            if ProcessInfo.processInfo.arguments.contains("--history-fixture-reset"), let historyFixtureRoot { try? FileManager.default.removeItem(at: historyFixtureRoot) }
             if !authState.isAuthenticated { try? authState.setExistingToken("HISTORY_FIXTURE_TOKEN", serverURL: URL(string: "http://127.0.0.1:18086")!, userID: 7) }
         }
         #else

@@ -1,17 +1,9 @@
 import Foundation
 import Security
-import OSLog
 
 final class KeychainService {
-    struct WriteFailure: LocalizedError {
-        let status: OSStatus
-        var errorDescription: String? { String(localized: "connection_credential_save_failed") }
-    }
-
     private let serviceName: String
     private let accessGroup: String?
-
-    private(set) var lastStatus: OSStatus?
 
     private var memory: [Key: String]?
 
@@ -19,14 +11,14 @@ final class KeychainService {
         serviceName = "ru.mzhukov.TAClient"
         accessGroup = Bundle.main.object(forInfoDictionaryKey: "KeychainAccessGroup") as? String
         #if DEBUG
-        let testing = NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || (FoldDevelopmentArguments.current.contains("--connection-fixture") || FoldDevelopmentArguments.current.contains("--playback-fixture"))
+        let testing = NSClassFromString("XCTestCase") != nil || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || (ProcessInfo.processInfo.arguments.contains("--connection-fixture") || ProcessInfo.processInfo.arguments.contains("--playback-fixture"))
         memory = inMemory || testing ? [:] : nil
         #else
         memory = inMemory ? [:] : nil
         #endif
     }
 
-    #if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))
+    #if DEBUG && targetEnvironment(simulator)
     /// Real persistence for synthetic relaunch tests, isolated from the owner's
     /// service and access group. This initializer is absent from device builds.
     init(persistentFixture: Bool) {
@@ -62,20 +54,13 @@ final class KeychainService {
         let values: [String: Any] = [kSecValueData as String: data,
                                     kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
         let update = SecItemUpdate(query as CFDictionary, values as CFDictionary)
-        lastStatus = update
         if update == errSecSuccess { return true }
-        guard update == errSecItemNotFound else {
-            logFailure(update)
-            return false
-        }
+        guard update == errSecItemNotFound else { return false }
 
         var addQuery = query
         addQuery[kSecValueData as String] = data
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let status = SecItemAdd(addQuery as CFDictionary, nil)
-        lastStatus = status
-        if status != errSecSuccess { logFailure(status) }
-        return status == errSecSuccess
+        return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
     }
 
     func load(for key: Key) -> String? {
@@ -86,7 +71,6 @@ final class KeychainService {
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
-        lastStatus = status
 
         guard status == errSecSuccess, let data = result as? Data else {
             return nil
@@ -98,11 +82,6 @@ final class KeychainService {
         if memory != nil { memory?[key] = nil; return }
         let query = baseQuery(for: key)
         SecItemDelete(query as CFDictionary)
-    }
-
-    private func logFailure(_ status: OSStatus) {
-        Logger(subsystem: "com.jacobcampbell.ta-client", category: "CredentialStore")
-            .error("Keychain write failed (OSStatus \(status, privacy: .public))")
     }
 
     func clearAll() {

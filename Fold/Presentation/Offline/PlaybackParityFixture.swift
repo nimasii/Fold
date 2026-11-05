@@ -1,4 +1,4 @@
-#if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))
+#if DEBUG && targetEnvironment(simulator)
 import SwiftUI
 
 /// Exercises shipping views, engine selection, transport and controls. Only the
@@ -46,7 +46,7 @@ private final class PlaybackParityFixture {
     let video: Video
     let isVLC: Bool
     init() {
-        let args = FoldDevelopmentArguments.current
+        let args = ProcessInfo.processInfo.arguments
         let long = args.contains("--playback-fixture-long")
         isVLC = args.contains("--playback-fixture-vlc") || long
         auth = AuthState(keychainService: KeychainService(inMemory: true), loadPersistedCredentials: false)

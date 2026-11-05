@@ -25,16 +25,10 @@ private final class ParityFixtureBundle: NSObject {}
 
     @Test func vlcFullscreenOwnershipIsPublishedToNormalDetailLifecycle() {
         var fullScreen = false
-        #if targetEnvironment(macCatalyst)
-        let configuration = VLCPlayerView(mediaURL: URL(fileURLWithPath: "/fixture.webm"), startPosition: 0,
-            duration: 12, onTimeChanged: { _ in }, isFullScreen: .init(get: { fullScreen }, set: { fullScreen = $0 }))
-        let container = MacVLCPlayerController(configuration: configuration)
-        #else
         let coordinator = VLCPlayerView.Coordinator(onTimeChanged: { _ in },
             isFullScreen: .init(get: { fullScreen }, set: { fullScreen = $0 }))
         let container = VLCPlayerContainerVC(mediaURL: URL(fileURLWithPath: "/fixture.webm"), startPosition: 0,
             duration: 12, coordinator: coordinator)
-        #endif
         container.setFullScreenState(true)
         #expect(fullScreen)
         container.setFullScreenState(false)

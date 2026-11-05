@@ -1,60 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-  "offline_download_action_mac": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Download to Mac"
-        }
-      },
-      "ru": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Загрузить на Mac"
-        }
-      }
-    }
-  },
-  "offline_on_mac": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "On this Mac"
-        }
-      },
-      "ru": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "На этом Mac"
-        }
-      }
-    }
-  },
-  "offline_empty_help_mac": {
-    "localizations": {
-      "en": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Open an archived video and choose Download to Mac."
-        }
-      },
-      "ru": {
-        "stringUnit": {
-          "state": "translated",
-          "value": "Откройте видео из архива и выберите «Загрузить на Mac»."
-        }
-      }
-    }
-  },
-  "connection_credential_save_failed": {
-    "localizations": {
-      "en": { "stringUnit": { "state": "translated", "value": "Sign-in succeeded, but Fold could not save your session securely. Please update the app and try again." } },
-      "ru": { "stringUnit": { "state": "translated", "value": "Вход выполнен, но Fold не удалось безопасно сохранить сеанс. Обновите приложение и повторите попытку." } }
-    }
-  },
   "library_delete_cleanup_pending": {
     "localizations": {
       "en": {

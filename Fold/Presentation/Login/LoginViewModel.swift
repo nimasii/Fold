@@ -36,9 +36,6 @@ final class LoginViewModel {
             await VideoCachePreloader.shared.clear()
             router.onLoginSuccess()
             return true
-        } catch let error as KeychainService.WriteFailure {
-            errorMessage = error.localizedDescription
-            return false
         } catch {
             errorMessage = String(localized: "login_server_incomplete")
             return false
@@ -58,8 +55,7 @@ final class LoginViewModel {
             await VideoCachePreloader.shared.clear()
             try? await authRepository.fetchUserAccount()
             router.onLoginSuccess()
-        } catch let error as KeychainService.WriteFailure { errorMessage = error.localizedDescription }
-        catch { errorMessage = String(localized: "login_server_incomplete") }
+        } catch { errorMessage = String(localized: "login_server_incomplete") }
     }
 
     func login() async {

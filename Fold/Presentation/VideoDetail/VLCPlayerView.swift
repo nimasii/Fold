@@ -1,4 +1,3 @@
-#if !targetEnvironment(macCatalyst)
 import SwiftUI
 import MobileVLCKit
 import OSLog
@@ -445,5 +444,3 @@ private class VLCFullScreenVC: UIViewController {
         ])
     }
 }
-
-#endif

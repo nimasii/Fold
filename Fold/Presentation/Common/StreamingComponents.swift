@@ -224,7 +224,7 @@ struct StreamingTabs<Destination: View>: View {
     }
     private var usesLegacySearch: Bool {
         #if DEBUG && targetEnvironment(simulator)
-        FoldDevelopmentArguments.current.contains("--navigation-legacy-search")
+        ProcessInfo.processInfo.arguments.contains("--navigation-legacy-search")
         #else
         false
         #endif

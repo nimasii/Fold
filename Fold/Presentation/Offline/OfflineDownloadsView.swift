@@ -36,7 +36,7 @@ struct OfflineDownloadsView: View {
                 }
                 if library.records.isEmpty {
                     ContentUnavailableView(String(localized: "offline_empty"), systemImage: "arrow.down.circle",
-                        description: Text(OfflineDeviceCopy.emptyHelp))
+                        description: Text(String(localized: "offline_empty_help")))
                 }
                 if !library.records.isEmpty && completed.isEmpty && transfers.isEmpty {
                     ContentUnavailableView(String(localized: "nav_no_matching_downloads"), systemImage: "line.3.horizontal.decrease.circle")
@@ -126,7 +126,7 @@ struct OfflineDownloadsView: View {
             NavigationStack {
                 Form {
                     Section {
-                        Label(OfflineDeviceCopy.onDevice, systemImage: OfflineDeviceCopy.symbol)
+                        Label(String(localized: UIDevice.current.userInterfaceIdiom == .pad ? "cinema_on_this_ipad" : "offline_on_device"), systemImage: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone")
                         LabeledContent(String(localized: "offline_storage_used"), value: library.totalSize)
                         Text(String(localized: "offline_private_help"))
                     }
@@ -150,7 +150,7 @@ struct OfflineDownloadsView: View {
     private var deviceHeader: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Label(OfflineDeviceCopy.onDevice, systemImage: OfflineDeviceCopy.symbol)
+                Label(String(localized: UIDevice.current.userInterfaceIdiom == .pad ? "cinema_on_this_ipad" : "stream_on_device"), systemImage: UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone")
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Text(library.totalSize).font(.subheadline).foregroundStyle(.secondary)

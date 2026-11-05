@@ -1,30 +1,6 @@
 import SwiftUI
 
 struct AboutView: View {
-    private var vlcName: String {
-        #if targetEnvironment(macCatalyst)
-        "libVLC"
-        #else
-        "MobileVLCKit"
-        #endif
-    }
-    private var vlcLicense: String {
-        #if targetEnvironment(macCatalyst)
-        let source = "libVLC is developed by VideoLAN and is statically linked through SwiftVLC. Complete Fold source and the exact library sources/rebuild instructions are available at:\nhttps://github.com/nimasii/Fold/blob/main/Mac/RELINKING.md\n\n"
-        guard let url = Bundle.main.url(forResource: "libVLC-LGPL-2.1", withExtension: "txt"),
-              let text = try? String(contentsOf: url, encoding: .utf8) else { return source + "LGPL-2.1-or-later — VideoLAN" }
-        return source + text
-        #else
-        return String(localized: "about_license_lgpl_body")
-        #endif
-    }
-
-    private var swiftVLCLicense: String {
-        guard let url = Bundle.main.url(forResource: "SwiftVLC-LICENSE", withExtension: "txt"),
-              let text = try? String(contentsOf: url, encoding: .utf8) else { return "MIT — Omar Albeik" }
-        return text
-    }
-
     private var appVersion: String {
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–"
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "–"
@@ -64,25 +40,14 @@ struct AboutView: View {
             }
 
             Section {
-                #if targetEnvironment(macCatalyst)
-                NavigationLink {
-                    LicenseDetailView(title: "SwiftVLC", license: swiftVLCLicense)
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("SwiftVLC")
-                        Text("MIT — Omar Albeik").font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                .accessibilityLabel("SwiftVLC")
-                #endif
                 NavigationLink {
                     LicenseDetailView(
-                        title: vlcName,
-                        license: vlcLicense
+                        title: "MobileVLCKit",
+                        license: String(localized: "about_license_lgpl_body")
                     )
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(vlcName)
+                        Text("MobileVLCKit")
                         Text("LGPL-2.1 — VideoLAN")
                             .font(.caption)
                             .foregroundStyle(.secondary)

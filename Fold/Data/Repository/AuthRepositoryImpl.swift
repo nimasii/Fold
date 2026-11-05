@@ -1,5 +1,4 @@
 import Foundation
-import OSLog
 
 final class AuthRepositoryImpl: AuthRepositoryProtocol {
     private let apiClient: APIClient
@@ -35,8 +34,6 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
     func connectSession(serverURL: URL, cookies: [HTTPCookie]) async throws {
         // Validate without fetching/creating tokens or replacing a working connection.
         let userID = try await apiClient.verify(RequestAuthorization(baseURL: serverURL, cookies: cookies))
-        Logger(subsystem: "com.jacobcampbell.ta-client", category: "ServerSignIn")
-            .info("Browser session verified; saving secure session")
         try authState.setSession(cookies: cookies, serverURL: serverURL, userID: userID)
     }
 
