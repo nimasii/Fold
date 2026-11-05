@@ -1,5 +1,5 @@
 {
-  "originHash" : "8dcad2c2aafc2f0d260766b9208f22015821e12c37de975b607d113e2b1d8803",
+  "originHash" : "e4dd7076782d3996a7b3f25eb44d4d21dc4641030602f3e741976589cd4da780",
   "pins" : [
     {
       "identity" : "mobilevlckit-spm",
@@ -8,6 +8,15 @@
       "state" : {
         "revision" : "07cd8b5510b95d8d0ff559966139df3deb1fad2d",
         "version" : "3.7.3"
+      }
+    },
+    {
+      "identity" : "swiftvlc",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/harflabs/SwiftVLC.git",
+      "state" : {
+        "revision" : "192393a45cdcd7ebb6befac26586360b8b1676b3",
+        "version" : "1.0.0"
       }
     }
   ],

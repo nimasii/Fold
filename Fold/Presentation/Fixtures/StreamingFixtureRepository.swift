@@ -1,4 +1,4 @@
-#if DEBUG && targetEnvironment(simulator) && !UI_REVIEW_PREVIEW
+#if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst)) && !UI_REVIEW_PREVIEW
 import Foundation
 
 /// Simulator-only illustrative data. All mutations are in memory; media/artwork are loopback fixtures.
@@ -7,7 +7,7 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
     DownloadRepositoryProtocol, PlaylistRepositoryProtocol, SearchRepositoryProtocol,
     ChannelRepositoryProtocol {
 
-    private var scenario: String { ProcessInfo.processInfo.arguments.first { $0.hasPrefix("--cinema-state=") }?.components(separatedBy: "=").last ?? "ready" }
+    private var scenario: String { FoldDevelopmentArguments.current.first { $0.hasPrefix("--cinema-state=") }?.components(separatedBy: "=").last ?? "ready" }
     private func prepareState() async throws {
         if scenario == "loading" { try await Task.sleep(for: .seconds(30)) }
         if scenario == "error" { throw AppError.unknown(message: "Fixture connection unavailable") }
@@ -23,7 +23,7 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
             ("earthrise", "A quiet kind of vast", "Orbital Journal", 0.0),
             ("moon", "Reading the lunar landscape", "Lunar Notes", 0.0)
         ]
-        let count = ProcessInfo.processInfo.arguments.contains("--streaming-fixture-long-list") ? 60 : 6
+        let count = FoldDevelopmentArguments.current.contains("--streaming-fixture-long-list") ? 60 : 6
         return (0..<count).map { index in
             let item = names[index % names.count]
             let id = index < 4 ? item.0 : item.0 + "-" + String(index)
@@ -106,12 +106,12 @@ final class StreamingFixtureRepository: VideoRepositoryProtocol, AuthRepositoryP
 
     func addToQueue(videoId: String) async throws {}
     func startDownload() async throws {
-        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-slow-queue") { try await Task.sleep(for: .seconds(3)) }
+        if FoldDevelopmentArguments.current.contains("--streaming-fixture-slow-queue") { try await Task.sleep(for: .seconds(3)) }
     }
     func getNotifications() async throws -> [TaskNotification] { [] }
     func killTask(id: String) async throws {}
     func rescanSubscriptions() async throws {
-        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture-slow-queue") { try await Task.sleep(for: .seconds(3)) }
+        if FoldDevelopmentArguments.current.contains("--streaming-fixture-slow-queue") { try await Task.sleep(for: .seconds(3)) }
     }
 
     func getPlaylists(page: Int, type: String?) async throws -> PlaylistListResult {

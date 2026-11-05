@@ -13,3 +13,17 @@ This product includes software developed by the following third parties:
 
 This product was built collaboratively with Claude Code (Anthropic).
 The application icon was generated with ChatGPT (OpenAI).
+
+The Mac Catalyst build also includes:
+
+  SwiftVLC 1.0.0 (https://github.com/harflabs/SwiftVLC/tree/v1.0.0)
+  Copyright (c) 2025 Omar Albeik. Licensed under MIT.
+  The license is included in Fold/Resources/SwiftVLC-LICENSE.txt.
+
+  libVLC 4.0, statically linked through SwiftVLC, LGPL-2.1-or-later.
+  Corresponding source, build scripts and patch series for this binary:
+  https://github.com/harflabs/SwiftVLC/tree/v1.0.0/scripts
+  https://code.videolan.org/videolan/vlc
+  Complete Fold source and instructions for rebuilding/relinking the library
+  are available in Mac/RELINKING.md in the Fold source repository. The full
+  LGPL-2.1 text is included in Fold/Resources/libVLC-LGPL-2.1.txt.

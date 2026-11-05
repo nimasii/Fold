@@ -5,7 +5,7 @@
 <h1 align="center">Fold</h1>
 
 <p align="center">
-  A native iOS and iPadOS client for <a href="https://github.com/tubearchivist/tubearchivist">Tube Archivist</a> — your self-hosted YouTube media archive.
+  A native iOS, iPadOS and Mac client for <a href="https://github.com/tubearchivist/tubearchivist">Tube Archivist</a> — your self-hosted YouTube media archive.
 </p>
 
 <p align="center">
@@ -92,7 +92,7 @@ Tube Archivist is excellent at archiving your YouTube library on a server you co
 ## Requirements
 
 - iOS / iPadOS 17.0 or later
-- Xcode 26.2 or later
+- Xcode 26.4 or later (Swift 6.3 for the Mac playback dependency)
 - A running [Tube Archivist](https://github.com/tubearchivist/tubearchivist) server you can reach from your device
 
 ## Building
@@ -118,6 +118,10 @@ Tube Archivist is excellent at archiving your YouTube library on a server you co
 ```bash
 xcodebuild build -scheme Fold -destination "platform=iOS Simulator,name=iPhone 17 Pro"
 ```
+
+### Mac build
+
+Fold also builds for **My Mac (Mac Catalyst)** on macOS 15 or later, sharing the existing interface. See [Mac build and signing instructions](Mac/README.md).
 
 ## First Run
 

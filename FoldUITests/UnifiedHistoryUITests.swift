@@ -1,3 +1,4 @@
+#if !targetEnvironment(macCatalyst)
 import XCTest
 import UIKit
 
@@ -368,3 +369,5 @@ final class UnifiedHistoryUITests: XCTestCase {
         return all.compactMapValues { ($0 as? NSNumber)?.intValue }
     }
 }
+
+#endif

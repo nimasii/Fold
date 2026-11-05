@@ -5,6 +5,10 @@ import Foundation
 
 final class MockAuthRepository: AuthRepositoryProtocol {
     var loginHandler: (String, String, String) async throws -> Void = { _, _, _ in }
+    var connectSessionHandler: (URL, [HTTPCookie]) async throws -> Void = { _, _ in throw AppError.unauthorized }
+    var connectTokenHandler: (URL, String) async throws -> Void = { _, _ in throw AppError.unauthorized }
+    func connectSession(serverURL: URL, cookies: [HTTPCookie]) async throws { try await connectSessionHandler(serverURL, cookies) }
+    func connectToken(serverURL: URL, token: String) async throws { try await connectTokenHandler(serverURL, token) }
     var pingHandler: () async throws -> Bool = { true }
     var fetchUserAccountHandler: () async throws -> Void = {}
     var logoutHandler: () -> Void = {}

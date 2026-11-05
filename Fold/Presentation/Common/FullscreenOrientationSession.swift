@@ -38,6 +38,7 @@ final class FullscreenOrientationSession {
     }
 
     private func request(_ orientations: UIInterfaceOrientationMask) {
+        #if !targetEnvironment(macCatalyst)
         guard let scene else { return }
         // Transition completions can run before UIKit removes the dismissed
         // controller from the presentation chain. Negotiate on the next main
@@ -50,5 +51,6 @@ final class FullscreenOrientationSession {
                     .error("Player orientation request declined: \(error.localizedDescription, privacy: .public)")
             }
         }
+        #endif
     }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 @Observable
 final class AuthState {
@@ -59,7 +60,7 @@ final class AuthState {
         let auth = RequestAuthorization(baseURL: serverURL, cookies: cookies)
         let data = try JSONEncoder().encode(StoredSession(serverURL: serverURL, cookies: auth.cookies.map(StoredCookie.init), userID: userID))
         guard let value = String(data: data, encoding: .utf8),
-              keychainService.save(value, for: .sessionCookies) else { throw AppError.unknown(message: String(localized: "error_generic")) }
+              keychainService.save(value, for: .sessionCookies) else { throw KeychainService.WriteFailure(status: keychainService.lastStatus ?? errSecInternalError) }
         authorization?.revoke()
         token = nil
         self.userID = userID; accountConfirmed = userID != nil
@@ -73,7 +74,7 @@ final class AuthState {
         let record = StoredSession(serverURL: serverURL, cookies: [], token: token, userID: userID)
         let data = try JSONEncoder().encode(record)
         guard let value = String(data: data, encoding: .utf8), keychainService.save(value, for: .sessionCookies) else {
-            throw AppError.unknown(message: String(localized: "error_generic"))
+            throw KeychainService.WriteFailure(status: keychainService.lastStatus ?? errSecInternalError)
         }
         authorization?.revoke()
         self.token = token

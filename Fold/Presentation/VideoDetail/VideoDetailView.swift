@@ -196,9 +196,9 @@ struct VideoDetailView: View {
                 onPlay: viewModel.isPlaying ? nil : { viewModel.startPlayback() },
                 showsDownload: !viewModel.isLocalPlayback)
 
-            #if DEBUG && targetEnvironment(simulator)
-            if ProcessInfo.processInfo.arguments.contains("--history-playback-fixture"),
-               !ProcessInfo.processInfo.arguments.contains("--history-hide-probes") {
+            #if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))
+            if FoldDevelopmentArguments.current.contains("--history-playback-fixture"),
+               !FoldDevelopmentArguments.current.contains("--history-hide-probes") {
                 Text("Fixture native status: \(viewModel.nativePlaybackStatus.rawValue)")
                     .font(.caption).accessibilityIdentifier("fixture.player.status")
                 Text(String(format: "%.3f", viewModel.nativePlaybackPosition)).font(.caption).accessibilityIdentifier("fixture.player.position")

@@ -40,10 +40,10 @@ struct FoldApp: App {
     }
 
     @ViewBuilder private var appContent: some View {
-        #if DEBUG && targetEnvironment(simulator)
-        if ProcessInfo.processInfo.arguments.contains("--streaming-fixture") {
+        #if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst))
+        if FoldDevelopmentArguments.current.contains("--streaming-fixture") {
             StreamingFixtureRoot()
-        } else if ProcessInfo.processInfo.arguments.contains("--playback-fixture") {
+        } else if FoldDevelopmentArguments.current.contains("--playback-fixture") {
             PlaybackParityFixtureView()
         } else { RootView() }
         #else

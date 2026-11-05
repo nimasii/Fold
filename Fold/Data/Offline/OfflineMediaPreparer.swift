@@ -3,7 +3,9 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import AudioToolbox
-#if !UI_REVIEW_PREVIEW
+#if targetEnvironment(macCatalyst)
+import SwiftVLC
+#elseif !UI_REVIEW_PREVIEW
 import MobileVLCKit
 #endif
 
@@ -109,7 +111,9 @@ final class OfflineMediaPreparer {
         do { return try await inspectNative(url) }
         catch is CancellationError { throw CancellationError() }
         catch {
-            #if !UI_REVIEW_PREVIEW
+            #if targetEnvironment(macCatalyst)
+            return try await MacOfflineMediaInspector.inspect(url)
+            #elseif !UI_REVIEW_PREVIEW
             let media = VLCMedia(url: url)
             defer { media.parseStop() }
             guard media.parse(options: VLCMediaParsingOptions(rawValue: 0), timeout: 5_000) == 0 else { throw OfflineFailure.invalidMedia }
@@ -202,37 +206,67 @@ final class OfflineMediaPreparer {
         // Output is a protected, precreated UUID path, never an untrusted title.
         guard !output.path.contains("'"), !output.path.contains("}") else { throw OfflineFailure.storage }
         let duration = source.duration
+        #if targetEnvironment(macCatalyst)
+        let media = try SwiftVLC.Media(url: input)
+        #else
         let media = VLCMedia(url: input)
+        #endif
         let audioNeedsEncoding = source.streams.contains { $0.type == "audio" && $0.codec != "aac" }
         var options: [String] = []
         options += ["vcodec=h264", "venc=avcodec{codec=h264_videotoolbox,bframes=0,options={realtime=1}}", "vb=\(bitrate / 1000)", "maxwidth=1920", "maxheight=1080"]
         if audioNeedsEncoding { options += ["acodec=mp4a", "ab=128", "channels=2", "samplerate=48000"] }
         let conversion = "transcode{\(options.joined(separator: ","))}:"
+        #if targetEnvironment(macCatalyst)
+        media.addOption(":sout=#\(conversion)standard{access=file,mux=avformat{mux=mp4},dst='\(output.path)'}")
+        #else
         media.addOption(":sout=#\(conversion)standard{access=file,mux=mp4{faststart=0},dst='\(output.path)'}")
+        #endif
         media.addOption(":no-sout-all")
         media.addOption(":no-drop-late-frames")
+        #if targetEnvironment(macCatalyst)
+        // libVLC 4's avformat muxer must receive both tracks before writing
+        // the MP4 header; a zero cache can start before AAC is announced.
+        media.addOption(":sout-mux-caching=1500")
+        #else
         media.addOption(":no-skip-frames")
         media.addOption(":sout-mux-caching=0")
+        #endif
         media.addOption(":file-caching=0")
         media.addOption(":avcodec-threads=1")
+        #if targetEnvironment(macCatalyst)
+        let instance = try SwiftVLC.VLCInstance(arguments: SwiftVLC.VLCInstance.defaultArguments + ["--sout-mux-caching=1500", "--avcodec-threads=1", "--no-drop-late-frames", "--file-caching=0"])
+        let player = SwiftVLC.Player(instance: instance)
+        defer { Task { await player.shutdown() } }
+        try player.play(media)
+        #else
         let player = VLCMediaPlayer(options: ["--sout-mux-caching=0", "--avcodec-threads=1", "--dav1d-thread-frames=1", "--dav1d-thread-tiles=1", "--no-drop-late-frames", "--no-skip-frames", "--file-caching=0"])
         player.media = media
         defer { player.stop(); player.media = nil }
         player.play()
+        #endif
         let start = ContinuousClock.now
         var lastActivity = start, lastSize: Int64 = 0, lastTime: Int32 = 0
         while true {
             try Task.checkCancellation()
             try await Task.sleep(for: .milliseconds(200))
             let size = Int64((try? output.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            #if targetEnvironment(macCatalyst)
+            let time = Int32(clamping: player.currentTime.components.seconds * 1000 + player.currentTime.components.attoseconds / 1_000_000_000_000_000)
+            #else
             let time = player.time.intValue
+            #endif
             if size > lastSize || time > lastTime { lastActivity = .now; lastSize = max(lastSize, size); lastTime = max(lastTime, time) }
             let fraction = min(0.99, max(0, Double(lastTime) / 1000 / duration))
             progress(fraction)
             guard size <= budget else { throw OfflineFailure.conversion }
             try checkSpace(max(0, budget - size))
             guard player.state != .error else { throw OfflineFailure.conversion }
-            if (player.state == .ended || player.state == .stopped) && !player.isPlaying && size > 16,
+            #if targetEnvironment(macCatalyst)
+            let ended = player.didReachEnd || player.state == .stopped
+            #else
+            let ended = player.state == .ended || player.state == .stopped
+            #endif
+            if ended && !player.isPlaying && size > 16,
                ContinuousClock.now - start > .seconds(1.5),
                ContinuousClock.now - lastActivity > .seconds(1.0) { break }
             if ContinuousClock.now - lastActivity > .seconds(90) || ContinuousClock.now - start > .seconds(max(300, duration * 10)) {
@@ -241,7 +275,11 @@ final class OfflineMediaPreparer {
         }
         // VLCKit's stop dispatches teardown; wait for the MP4 muxer to close and
         // write its final index before asking AVFoundation to inspect the file.
+        #if targetEnvironment(macCatalyst)
+        await player.stopAndWait()
+        #else
         player.stop()
+        #endif
         let closing = ContinuousClock.now
         var changed = closing
         var closingSize: Int64 = -1

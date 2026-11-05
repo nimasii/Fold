@@ -15,6 +15,19 @@ struct LoginViewModelTests {
         return (vm, router, authRepo)
     }
 
+    @Test func serverVerificationAndCredentialPersistenceHaveDistinctErrors() async {
+        let repo = MockAuthRepository()
+        let (vm, router, _) = makeSUT(authRepo: repo)
+        let url = URL(string: "https://fixture.example")!
+        repo.connectSessionHandler = { _, _ in throw KeychainService.WriteFailure(status: -34018) }
+        #expect(await vm.completeServerSignIn(url: url, cookies: []) == false)
+        #expect(vm.errorMessage == String(localized: "connection_credential_save_failed"))
+        #expect(router.appState != .authenticated)
+        repo.connectSessionHandler = { _, _ in throw AppError.unauthorized }
+        #expect(await vm.completeServerSignIn(url: url, cookies: []) == false)
+        #expect(vm.errorMessage == String(localized: "login_server_incomplete"))
+    }
+
     @Test func emptyFields_setsErrorMessage_doesNotCallRepo() async {
         var repoCalled = false
         let repo = MockAuthRepository()

@@ -1,4 +1,4 @@
-#if DEBUG && targetEnvironment(simulator) && !UI_REVIEW_PREVIEW
+#if DEBUG && (targetEnvironment(simulator) || targetEnvironment(macCatalyst)) && !UI_REVIEW_PREVIEW
 import SwiftUI
 
 /// Actual shipping screens and media services with isolated, clearly labeled test data.
@@ -6,7 +6,7 @@ struct StreamingFixtureRoot: View {
     @Environment(DependencyContainer.self) private var container
     @Environment(\.dynamicTypeSize) private var systemTypeSize
     @State private var routed = false
-    private let arguments = ProcessInfo.processInfo.arguments
+    private let arguments = FoldDevelopmentArguments.current
     private var privateArtworkCount: Int {
         container.offlineLibrary.records.reduce(0) { count, record in
             count + (container.offlineLibrary.thumbnailURL(record.id) == nil ? 0 : 1)
